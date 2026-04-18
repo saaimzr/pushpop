@@ -24,6 +24,7 @@ import {
   animatePreview,
   banner,
   clearScreen,
+  enterAltScreen,
   statusPanel,
   ok,
   purple,
@@ -508,6 +509,11 @@ export async function runDashboard(): Promise<void> {
     | 'feedback'
     | 'uninstall'
     | 'exit';
+
+  // Keep the dashboard in the alternate screen buffer. Removing this causes
+  // banner/frame redraws from prompt and non-prompt paths to stack in normal
+  // terminal scrollback on Git Bash and similar terminals.
+  enterAltScreen();
 
   if (!hooksInstalled()) {
     const answer = await promptInitMissing();

@@ -14,10 +14,11 @@ export const white = W;
 export const dim = DIM;
 export const warnColor = WARN;
 
-// Clear only the visible viewport and move the cursor home. This keeps the
-// terminal scrollback intact while preserving the existing prompt redraw flow.
+// The interactive dashboard mixes prompt-owned redraws with a few direct status
+// writes, so we intentionally clear both the viewport and scrollback there.
+// Preserving native scrollback in this model causes stacked banner/frame output.
 export function clearScreen(): void {
-  process.stdout.write('\x1B[2J\x1B[0;0H');
+  process.stdout.write('\x1B[2J\x1B[3J\x1B[0;0H');
 }
 
 let altScreenActive = false;

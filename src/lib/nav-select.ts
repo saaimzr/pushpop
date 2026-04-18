@@ -30,10 +30,86 @@ interface FrameConfig {
   helpText?: string;
 }
 
-function renderFrame(config: FrameConfig, body: string[]): string {
-  return [config.frame, W(config.message), ...body, DIM(config.helpText ?? '← back  ↑↓ navigate  → or Enter select')]
+interface FrameViewport {
+  availableRows: number;
+  canScroll: boolean;
+  content?: string;
+  maxOffset: number;
+  offset: number;
+}
+
+function getTerminalRows(): number {
+  return Math.max(process.stdout.rows ?? 24, 8);
+}
+
+function getFrameViewport(frame: string | undefined, reservedRows: number, requestedOffset: number): FrameViewport {
+  if (!frame) {
+    return {
+      availableRows: 0,
+      canScroll: false,
+      content: undefined,
+      maxOffset: 0,
+      offset: 0,
+    };
+  }
+
+  const frameLines = frame.split('\n');
+  const availableRows = Math.max(0, getTerminalRows() - reservedRows);
+
+  if (frameLines.length <= availableRows) {
+    return {
+      availableRows,
+      canScroll: false,
+      content: frame,
+      maxOffset: 0,
+      offset: 0,
+    };
+  }
+
+  const maxOffset = Math.max(0, frameLines.length - availableRows);
+  const offset = Math.max(0, Math.min(requestedOffset, maxOffset));
+  const content = availableRows > 0 ? frameLines.slice(offset, offset + availableRows).join('\n') : undefined;
+
+  return {
+    availableRows,
+    canScroll: true,
+    content,
+    maxOffset,
+    offset,
+  };
+}
+
+function getDefaultHelpText(kind: 'select' | 'input'): string {
+  if (kind === 'input') {
+    return 'Left back  Type to edit  Enter submit';
+  }
+
+  return 'Left back  Up/Down navigate  Right or Enter select';
+}
+
+function getHelpText(config: FrameConfig, viewport: FrameViewport, kind: 'select' | 'input'): string {
+  const base = config.helpText ?? getDefaultHelpText(kind);
+
+  if (!viewport.canScroll) {
+    return base;
+  }
+
+  return `${base}  PgUp/PgDn or Ctrl+U/Ctrl+D scroll header`;
+}
+
+function renderFrame(
+  config: FrameConfig,
+  body: string[],
+  viewport: FrameViewport,
+  kind: 'select' | 'input',
+): string {
+  return [viewport.content, W(config.message), ...body, DIM(getHelpText(config, viewport, kind))]
     .filter((line) => line && line.length > 0)
     .join('\n');
+}
+
+function getScrollStep(viewport: FrameViewport): number {
+  return Math.max(1, Math.floor(Math.max(1, viewport.availableRows) / 2));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,11 +117,21 @@ const _selectPrompt = createPrompt<unknown, FrameConfig & { choices: NavChoice<a
   (config, done) => {
     const [active, setActive] = useState(0);
     const choices = config.choices;
-    const pageSize = config.pageSize ?? 10;
+    const maxChoiceRows = Math.max(1, getTerminalRows() - 2);
+    const pageSize = Math.max(1, Math.min(config.pageSize ?? 10, maxChoiceRows));
+    const initialViewport = getFrameViewport(config.frame, 1 + pageSize + 1, 0);
+    const [frameOffset, setFrameOffset] = useState(initialViewport.maxOffset);
 
     useKeypress((key) => {
+      const viewport = getFrameViewport(config.frame, 1 + pageSize + 1, frameOffset);
+      const scrollStep = getScrollStep(viewport);
+
       if (key.name === 'c' && key.ctrl) {
         exitClean(0);
+      } else if (key.name === 'pageup' || (key.name === 'u' && key.ctrl)) {
+        setFrameOffset(Math.max(0, viewport.offset - scrollStep));
+      } else if (key.name === 'pagedown' || (key.name === 'd' && key.ctrl)) {
+        setFrameOffset(Math.min(viewport.maxOffset, viewport.offset + scrollStep));
       } else if (isEnterKey(key) || key.name === 'right') {
         done(choices[active].value);
       } else if (isUpKey(key)) {
@@ -62,10 +148,11 @@ const _selectPrompt = createPrompt<unknown, FrameConfig & { choices: NavChoice<a
     const visible = choices.slice(start, end);
     const lines = visible.map((choice, index) => {
       const isActive = start + index === active;
-      return `${isActive ? P('❯') : ' '}  ${choice.name}`;
+      return `${isActive ? P('>') : ' '}  ${choice.name}`;
     });
 
-    return renderFrame(config, lines);
+    const viewport = getFrameViewport(config.frame, 1 + lines.length + 1, frameOffset);
+    return renderFrame(config, lines, viewport, 'select');
   },
 );
 
@@ -77,6 +164,8 @@ interface InputConfig extends FrameConfig {
 const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
   const [value, setValue] = useState(config.defaultValue ?? '');
   const [errorMsg, setError] = useState<string>();
+  const initialViewport = getFrameViewport(config.frame, 1 + 1 + 1, 0);
+  const [frameOffset, setFrameOffset] = useState(initialViewport.maxOffset);
 
   useEffect((rl) => {
     if (config.defaultValue) {
@@ -85,8 +174,17 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
   }, []);
 
   useKeypress(async (key, rl) => {
+    const viewport = getFrameViewport(config.frame, 1 + 1 + 1 + (errorMsg ? 1 : 0), frameOffset);
+    const scrollStep = getScrollStep(viewport);
+
     if (key.name === 'c' && key.ctrl) {
       exitClean(0);
+    } else if (key.name === 'pageup' || (key.name === 'u' && key.ctrl)) {
+      setFrameOffset(Math.max(0, viewport.offset - scrollStep));
+      return;
+    } else if (key.name === 'pagedown' || (key.name === 'd' && key.ctrl)) {
+      setFrameOffset(Math.min(viewport.maxOffset, viewport.offset + scrollStep));
+      return;
     } else if (key.name === 'left') {
       done(NAV_BACK_INPUT);
       return;
@@ -115,8 +213,9 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
     setError(undefined);
   });
 
-  const body = [`${P('›')} ${value}`];
-  const content = renderFrame(config, body);
+  const body = [`${P('>')} ${value}`];
+  const viewport = getFrameViewport(config.frame, 1 + body.length + 1 + (errorMsg ? 1 : 0), frameOffset);
+  const content = renderFrame(config, body, viewport, 'input');
   return [content, errorMsg ? ERR(errorMsg) : undefined];
 });
 
@@ -140,12 +239,6 @@ export async function navInput(config: {
   helpText?: string;
 }): Promise<string | typeof NAV_BACK> {
   clearScreen();
-  const result = await _inputPrompt(
-    {
-      ...config,
-      helpText: config.helpText ?? '← back  Type to edit  Enter submit',
-    },
-    { clearPromptOnDone: true },
-  );
+  const result = await _inputPrompt(config, { clearPromptOnDone: true });
   return result === NAV_BACK_INPUT ? NAV_BACK : result;
 }
