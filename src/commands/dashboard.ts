@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { getConfig, setConfig, getCustomUploadCount, getVolume, HOOKS_DIR, DEFAULT_VOLUME } from '../lib/config.js';
+import { getConfig, setConfig, getCustomUploadCount, getVolume, HOOKS_DIR } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
 import {
@@ -22,7 +22,7 @@ import {
   purple,
   white,
   dim,
-  warn as warnUi,
+  warnColor,
 } from '../lib/ui.js';
 import { navSelect, navInput, NAV_BACK } from '../lib/nav-select.js';
 import { runUpload } from './upload.js';
@@ -38,10 +38,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 function formatAssignment(ref: SoundRef | undefined): string {
-  if (!ref) return '(none set)';
+  if (!ref) return dim('— (not set)');
+
   const resolved = resolveSoundPath(ref);
-  if (!resolved) return `♪  ${ref.name}  ${'(file missing)'}`;
-  return `♪  ${ref.name}`;
+  if (!resolved) return warnColor(`${ref.name} (file missing)`);
+
+  return white(ref.name);
 }
 
 function getStatusLines(): { label: string; value: string }[] {
@@ -52,16 +54,16 @@ function getStatusLines(): { label: string; value: string }[] {
   const lines: { label: string; value: string }[] = [
     { label: 'commit', value: formatAssignment(assignments.commit) },
     { label: 'push', value: formatAssignment(assignments.push) },
-    { label: 'volume', value: `${volume}%` },
+    { label: 'volume', value: white(`${volume}%`) },
   ];
 
   if (!isPro()) {
     lines.push({
       label: 'uploads',
-      value: `${uploadCount}/${FREE_TIER_LIMIT} custom slots used`,
+      value: white(`${uploadCount}/${FREE_TIER_LIMIT} custom slots used`),
     });
   } else {
-    lines.push({ label: 'license', value: 'pro  ◆  unlimited uploads' });
+    lines.push({ label: 'license', value: white('pro - unlimited uploads') });
   }
 
   return lines;
@@ -73,7 +75,6 @@ function getFrame(extraLines: string[] = []): string {
   return parts.join('\n');
 }
 
-// Used for non-interactive status screens (before sleep() calls).
 function printHeader(extraLines: string[] = []): void {
   clearScreen();
   console.log('');
@@ -93,7 +94,7 @@ function printHeader(extraLines: string[] = []): void {
 
 function getAddCustomLines(): string[] {
   if (isPro()) {
-    return [`  ${purple('◆')}  ${white('Pro — unlimited custom uploads')}`];
+    return [`  ${purple('∞')}  ${white('Pro - unlimited custom uploads')}`];
   }
 
   return [`  ${dim(`Custom uploads: ${getCustomUploadCount()}/${FREE_TIER_LIMIT} slots used`)}`];
@@ -155,17 +156,15 @@ async function pickFromList(
     let previewLine = `  ${dim('(audio file not found)')}`;
 
     if (filePath) {
-      // Background mode so spawn returns immediately and we can animate
-      // music-note frames while the sound plays.
       const playback = playSound(chosen, { mode: 'background' });
       if (playback.started) {
         clearScreen();
         console.log(getFrame([`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`]));
         const durationMs = ((chosenItem?.durationSec ?? 3) + 0.5) * 1000;
         await animatePreview(durationMs);
-        previewLine = `  ${purple('♪')}  Played: ${white(chosen.name)}`;
+        previewLine = `  ${purple('♪')}  ${white(`Played: ${chosen.name}`)}`;
       } else {
-        previewLine = `  ${purple('⚠')}  Preview unavailable on this system`;
+        previewLine = `  ${warnColor('Preview unavailable on this system')}`;
       }
     }
 
@@ -181,8 +180,7 @@ async function pickFromList(
     if (useIt === NAV_BACK || useIt === false) continue;
 
     const { assignments } = getConfig();
-    assignments[event] = chosen;
-    setConfig({ assignments });
+    setConfig({ assignments: { ...assignments, [event]: chosen } });
     ok(`"${chosen.name}" set for ${event}`);
     await sleep(900);
     return 'selected';
@@ -194,20 +192,15 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
   const customSounds = getCustomSounds();
 
   while (true) {
-    const genreChoices: { name: string; value: string }[] = [];
-
-    // Allow clearing the current assignment. Only shown if one is actually set,
-    // so the list stays clean for first-time users.
-    const currentlySet = getConfig().assignments[event];
-    if (currentlySet) {
-      genreChoices.push({
+    const genreChoices: { name: string; value: string }[] = [
+      {
         name: `${purple('⊘')}  ${white('No sound (remove assignment)')}`,
         value: '__remove__',
-      });
-    }
+      },
+    ];
 
     if (customSounds.length > 0) {
-      genreChoices.push({ name: `${purple('◎')}  My uploads (${customSounds.length})`, value: '__custom__' });
+      genreChoices.push({ name: `${purple('♫')}  My uploads (${customSounds.length})`, value: '__custom__' });
     }
 
     for (const genre of genres) {
@@ -231,31 +224,29 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
 
     if (genreId === '__remove__') {
       const { assignments } = getConfig();
-      const next = { ...assignments };
-      delete next[event];
-      setConfig({ assignments: next });
+      setConfig({ assignments: { ...assignments, [event]: undefined } });
       ok(`Removed ${event} sound`);
       await sleep(900);
       return;
     }
 
-    let soundItems: { ref: SoundRef; label: string }[];
+    let soundItems: { ref: SoundRef; label: string; durationSec?: number }[];
 
     if (genreId === '__custom__') {
       soundItems = customSounds.map((sound) => ({
-        ref: { type: 'custom' as const, name: sound.name, file: sound.file },
+        ref: { type: 'custom', name: sound.name, file: sound.file },
         label: sound.name,
       }));
     } else {
       const sounds = getSoundsForGenre(genreId);
       if (sounds.length === 0) {
-        printHeader([`  ${purple('○')}  No sounds in this pack yet — check back soon.`]);
+        printHeader([`  ${purple('○')}  No sounds in this pack yet - check back soon.`]);
         await sleep(1800);
         continue;
       }
 
       soundItems = sounds.map((sound) => ({
-        ref: { type: 'builtin' as const, name: sound.name, file: sound.file },
+        ref: { type: 'builtin', name: sound.name, file: sound.file },
         label: sound.name,
         durationSec: sound.durationSec,
       }));
@@ -266,6 +257,27 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
   }
 }
 
+async function setVolumeLevel(): Promise<void> {
+  const current = getVolume();
+  const choices: { name: string; value: number | 'back' }[] = [0, 25, 50, 75, 100].map((value) => ({
+    name: `${purple(value === current ? '●' : '○')}  ${white(`${value}%`)}`,
+    value,
+  }));
+  choices.push({ name: `${purple('←')}  Back`, value: 'back' });
+
+  const choice = await navSelect<number | 'back'>({
+    frame: getFrame(),
+    message: white('Choose a volume level:'),
+    choices,
+  });
+
+  if (choice === NAV_BACK || choice === 'back') return;
+
+  setConfig({ volume: choice });
+  ok(`Volume set to ${choice}%`);
+  await sleep(900);
+}
+
 async function addCustomSound(): Promise<void> {
   while (true) {
     const uploadCount = getCustomUploadCount();
@@ -274,13 +286,13 @@ async function addCustomSound(): Promise<void> {
       const urlReady = !LEMONSQUEEZY_URL.includes('YOUR_PRODUCT_ID');
       const paywallLines = urlReady
         ? [
-            `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
-            `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('→')} ${dim(LEMONSQUEEZY_URL)}`,
+            `  ${warnColor(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
+            `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('->')} ${dim(LEMONSQUEEZY_URL)}`,
             `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
           ]
         : [
-            `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
-            `  ${dim('Pro upgrade link coming soon — check back shortly.')}`,
+            `  ${warnColor(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
+            `  ${dim('Pro upgrade link coming soon - set the Lemon Squeezy URL before publish.')}`,
           ];
       printHeader(paywallLines);
       await sleep(2500);
@@ -293,7 +305,7 @@ async function addCustomSound(): Promise<void> {
       frame: getFrame(getAddCustomLines()),
       message: white('How do you want to add a sound?'),
       choices: [
-        { name: `${purple('⊞')}  Browse files (open file picker)`, value: 'browse' },
+        { name: `${purple('📁')}  Browse files (open file picker)`, value: 'browse' },
         { name: `${purple('⌨')}  Enter file path manually`, value: 'manual' },
         { name: `${purple('←')}  Back`, value: 'back' },
       ],
@@ -345,15 +357,12 @@ async function addCustomSound(): Promise<void> {
 }
 
 async function shareFeedback(): Promise<void> {
-  // Plain email display — no browser launch, no form URL. Users can copy the
-  // address from their terminal. Wait for any key so the user controls when
-  // to return to the dashboard.
   const bodyLines = [
     `  ${purple('♡')}  ${white('Share feedback')}`,
     '',
     `        ${purple(FEEDBACK_EMAIL)}`,
     '',
-    `  ${dim('Bug reports, feature requests, producer-tag suggestions — all welcome.')}`,
+    `  ${dim('Bug reports, feature requests, producer-tag suggestions - all welcome.')}`,
   ];
 
   await navSelect({
@@ -393,12 +402,12 @@ function hooksInstalled(): boolean {
 async function promptInitMissing(): Promise<'init' | 'exit'> {
   const choice = await navSelect<'init' | 'exit'>({
     frame: getFrame([
-      `  ${purple('⚠')}  ${white('pushpop is not set up on this machine yet.')}`,
-      `  ${dim('Hooks are missing — sounds will not play on git commit/push.')}`,
+      `  ${warnColor('pushpop is not set up on this machine yet.')}`,
+      `  ${dim('Hooks are missing - sounds will not play on git commit/push.')}`,
     ]),
     message: white('Run setup now?'),
     choices: [
-      { name: `${purple('▸')}  Run setup (pushpop init)`, value: 'init' },
+      { name: `${purple('⚙')}  Run setup (pushpop init)`, value: 'init' },
       { name: `${purple('✕')}  Exit`, value: 'exit' },
     ],
   });
@@ -407,14 +416,13 @@ async function promptInitMissing(): Promise<'init' | 'exit'> {
 }
 
 export async function runDashboard(): Promise<void> {
-  type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'feedback' | 'uninstall' | 'exit';
+  type MenuChoice = 'commit' | 'push' | 'volume' | 'upload' | 'activate' | 'feedback' | 'uninstall' | 'exit';
 
   enterAltScreen();
 
   if (!hooksInstalled()) {
     const answer = await promptInitMissing();
     if (answer === 'exit') return;
-    // Lazy-import so we don't pull init's file writes into normal dashboard flow.
     const { runInit } = await import('./init.js');
     runInit();
     await sleep(1200);
@@ -425,21 +433,27 @@ export async function runDashboard(): Promise<void> {
       frame: getFrame(),
       message: white('What do you want to do?'),
       choices: [
-        { name: `${purple('▸')}  Set commit sound`, value: 'commit' },
-        { name: `${purple('▸')}  Set push sound`, value: 'push' },
-        { name: `${purple('⊕')}  Add custom sound`, value: 'upload' },
-        { name: `${purple('⌿')}  Activate license`, value: 'activate' },
+        { name: `${purple('⚙')}  Set commit sound`, value: 'commit' },
+        { name: `${purple('⚙')}  Set push sound`, value: 'push' },
+        { name: `${purple('◐')}  Set volume`, value: 'volume' },
+        { name: `${purple('♫')}  Add custom sound`, value: 'upload' },
+        { name: `${purple('🔓')}  Activate license`, value: 'activate' },
         { name: `${purple('✎')}  Share feedback`, value: 'feedback' },
-        { name: `${purple('⊗')}  Uninstall`, value: 'uninstall' },
+        { name: `${purple('⌦')}  Uninstall`, value: 'uninstall' },
         { name: `${purple('✕')}  Exit`, value: 'exit' },
       ],
-      pageSize: 8,
+      pageSize: 9,
     });
 
     if (choice === NAV_BACK || choice === 'exit') break;
 
     if (choice === 'commit' || choice === 'push') {
       await pickSound(choice);
+      continue;
+    }
+
+    if (choice === 'volume') {
+      await setVolumeLevel();
       continue;
     }
 

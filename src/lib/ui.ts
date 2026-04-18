@@ -7,10 +7,12 @@ import { LEMONSQUEEZY_URL, PRICE } from './license.js';
 const P = chalk.hex('#9B59B6');   // purple brand color
 const W = chalk.white;
 const DIM = chalk.dim;
+const WARN = chalk.hex('#F5B041');
 
 export const purple = P;
 export const white = W;
 export const dim = DIM;
+export const warnColor = WARN;
 
 // \x1B[2J clears the visible viewport; \x1B[3J also clears scrollback so repeated
 // redraws don't accumulate in the terminal's history.
@@ -72,10 +74,19 @@ export function exitClean(code = 0): never {
 }
 
 let cachedBanner: string | null = null;
-let cachedBannerVersion: string | null = null;
+let cachedBannerKey: string | null = null;
 
 export function banner(version: string): string {
-  if (cachedBanner !== null && cachedBannerVersion === version) {
+  const isNarrow = (process.stdout.columns ?? 80) < 50;
+  const cacheKey = `${version}:${isNarrow ? 'narrow' : 'full'}`;
+
+  if (cachedBanner !== null && cachedBannerKey === cacheKey) {
+    return cachedBanner;
+  }
+
+  if (isNarrow) {
+    cachedBanner = P(`pushpop v${version}`);
+    cachedBannerKey = cacheKey;
     return cachedBanner;
   }
 
@@ -98,13 +109,13 @@ export function banner(version: string): string {
     '',
     P(mascot),
   ].join('\n');
-  cachedBannerVersion = version;
+  cachedBannerKey = cacheKey;
   return cachedBanner;
 }
 
 export function statusPanel(lines: { label: string; value: string }[]): string {
   const rows = lines
-    .map(({ label, value }) => `  ${DIM(label.padEnd(10))} ${W(value)}`)
+    .map(({ label, value }) => `  ${DIM(label.padEnd(10))} ${value}`)
     .join('\n');
 
   return boxen(rows, {

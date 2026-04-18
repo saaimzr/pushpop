@@ -1,49 +1,94 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
-import { HOOKS_DIR } from './config.js';
+import { execFileSync, execSync } from 'child_process';
+import { HOOKS_DIR, PUSHPOP_DIR } from './config.js';
 
-const POST_COMMIT_HOOK = `#!/bin/sh
-# pushpop: play commit sound, then chain to project hook
-# Skip sounds triggered by npm version (npm_command=version is set in child processes)
-if [ "\${npm_command}" != "version" ]; then
-  pushpop play --event commit 2>/dev/null || true
-fi
+function readFirstLine(command: string, args: string[]): string | null {
+  try {
+    const output = execFileSync(command, args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    }).trim();
+    if (!output) return null;
+    return output.split(/\r?\n/).find(Boolean) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function quoteForSh(value: string): string | null {
+  if (/[\0\r\n]/.test(value)) return null;
+  return `'${value.replace(/'/g, String.raw`'"'"'`)}'`;
+}
+
+function toHookBinary(value: string): string {
+  return process.platform === 'win32' ? value.replace(/\\/g, '/') : value;
+}
+
+export function resolvePushpopBinaryPath(): string | null {
+  if (process.platform === 'win32') {
+    const fromWhere =
+      readFirstLine('where', ['pushpop.cmd']) ??
+      readFirstLine('where', ['pushpop.exe']) ??
+      readFirstLine('where', ['pushpop']);
+    if (fromWhere && fs.existsSync(fromWhere)) {
+      return path.resolve(fromWhere);
+    }
+  } else {
+    const fromWhich = readFirstLine('which', ['pushpop']);
+    if (fromWhich && fs.existsSync(fromWhich)) {
+      return path.resolve(fromWhich);
+    }
+  }
+
+  const argvPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+  if (argvPath && fs.existsSync(argvPath)) {
+    return argvPath;
+  }
+
+  return null;
+}
+
+function buildHook(event: 'commit' | 'push', projectHookName: 'post-commit' | 'pre-push'): string {
+  const resolvedBin = resolvePushpopBinaryPath();
+  const quotedBin = resolvedBin ? quoteForSh(toHookBinary(resolvedBin)) : null;
+  const binExpr = quotedBin ?? 'pushpop';
+  const markerFile = `$HOME/.pushpop/.last-play-${event}`;
+
+  return `#!/bin/sh
+# pushpop: play ${event} sound, then chain to project hook
+PUSHPOP_BIN=${binExpr}
 
 GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+
+if [ -z "$CI" ] && [ "\${npm_command}" != "version" ]; then
+  mkdir -p "$HOME/.pushpop" 2>/dev/null || true
+  last=$(stat -c %Y "${markerFile}" 2>/dev/null || echo 0)
+  now=$(date +%s 2>/dev/null || echo 0)
+  if [ $((now - last)) -ge 2 ]; then
+    touch "${markerFile}" 2>/dev/null || true
+    "$PUSHPOP_BIN" play --event ${event} 2>/dev/null || true
+  fi
+fi
+
 if [ -n "$GIT_DIR" ]; then
-  PROJECT_HOOK="$GIT_DIR/hooks/post-commit"
+  PROJECT_HOOK="$GIT_DIR/hooks/${projectHookName}"
   if [ -f "$PROJECT_HOOK" ] && [ -x "$PROJECT_HOOK" ]; then
     exec "$PROJECT_HOOK" "$@"
   fi
 fi
 `;
-
-const PRE_PUSH_HOOK = `#!/bin/sh
-# pushpop: play push sound, then chain to project hook
-if [ "\${npm_command}" != "version" ]; then
-  pushpop play --event push 2>/dev/null || true
-fi
-
-GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
-if [ -n "$GIT_DIR" ]; then
-  PROJECT_HOOK="$GIT_DIR/hooks/pre-push"
-  if [ -f "$PROJECT_HOOK" ] && [ -x "$PROJECT_HOOK" ]; then
-    exec "$PROJECT_HOOK" "$@"
-  fi
-fi
-`;
+}
 
 export function installHooks(): void {
   const postCommitPath = path.join(HOOKS_DIR, 'post-commit');
   const prePushPath = path.join(HOOKS_DIR, 'pre-push');
 
-  fs.writeFileSync(postCommitPath, POST_COMMIT_HOOK, { mode: 0o755 });
-  fs.writeFileSync(prePushPath, PRE_PUSH_HOOK, { mode: 0o755 });
+  fs.writeFileSync(postCommitPath, buildHook('commit', 'post-commit'), { mode: 0o755 });
+  fs.writeFileSync(prePushPath, buildHook('push', 'pre-push'), { mode: 0o755 });
 
   // Clean up legacy post-index-change hook from older pushpop versions.
-  // It fired on both `git add` and `git commit`, which caused the add sound
-  // to replay during commits. The feature has been dropped.
   const legacyPostIndexChange = path.join(HOOKS_DIR, 'post-index-change');
   if (fs.existsSync(legacyPostIndexChange)) {
     try {
@@ -55,7 +100,6 @@ export function installHooks(): void {
 }
 
 export function setGlobalHooksPath(): void {
-  // Preserve whatever the user had set previously so `uninstall` can restore it.
   try {
     const prior = execSync('git config --global --get core.hooksPath', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
@@ -106,8 +150,14 @@ export function removeHooks(): void {
   const postCommitPath = path.join(HOOKS_DIR, 'post-commit');
   const prePushPath = path.join(HOOKS_DIR, 'pre-push');
   const legacyPostIndexChange = path.join(HOOKS_DIR, 'post-index-change');
-  [postCommitPath, prePushPath, legacyPostIndexChange].forEach((p) => {
-    if (fs.existsSync(p)) fs.rmSync(p);
+  const markerFiles = [
+    path.join(PUSHPOP_DIR, '.last-play-commit'),
+    path.join(PUSHPOP_DIR, '.last-play-push'),
+  ];
+
+  [postCommitPath, prePushPath, legacyPostIndexChange, ...markerFiles].forEach((targetPath) => {
+    if (fs.existsSync(targetPath)) {
+      fs.rmSync(targetPath);
+    }
   });
 }
-

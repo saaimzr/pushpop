@@ -10,6 +10,7 @@ dist/
 # Logs and local tarballs
 *.log
 *.tgz
+.npm-cache/
 
 # OS noise
 .DS_Store

@@ -3,6 +3,7 @@
 import './lib/env.js';
 import { createRequire } from 'module';
 import { Command } from 'commander';
+import updateNotifier from 'update-notifier';
 import { runDashboard } from './commands/dashboard.js';
 import { exitClean } from './lib/ui.js';
 import { runInit } from './commands/init.js';
@@ -11,16 +12,21 @@ import { runUse } from './commands/use.js';
 import { runActivate } from './commands/activate.js';
 import { runPlay } from './commands/play.js';
 import { runUninstall } from './commands/uninstall.js';
+import { runDoctor } from './commands/doctor.js';
 
 const require = createRequire(import.meta.url);
-const { version } = require('../package.json') as { version: string };
+const pkg = require('../package.json') as { name: string; version: string };
+
+if (process.env.NO_UPDATE_NOTIFIER !== '1') {
+  updateNotifier({ pkg }).notify({ defer: true });
+}
 
 const program = new Command();
 
 program
   .name('pushpop')
   .description('Producer-style audio tags for your git commits and pushes')
-  .version(version, '-v, --version');
+  .version(pkg.version, '-v, --version');
 
 program
   .command('init')
@@ -29,7 +35,7 @@ program
 
 program
   .command('upload <file>')
-  .description('Upload an audio file as a custom sound (≤3s; longer files are auto-truncated)')
+  .description('Upload an audio file as a custom sound (max 3s; longer files are auto-truncated)')
   .option('-n, --name <name>', 'Custom sound name (defaults to filename)')
   .action(async (file: string, opts: { name?: string }) => {
     const success = await runUpload(file, opts);
@@ -52,6 +58,11 @@ program
   .description('Play the sound for an event (called internally by git hooks)')
   .option('--event <event>', 'Event type: commit or push', 'commit')
   .action((opts: { event: 'commit' | 'push' }) => runPlay(opts.event));
+
+program
+  .command('doctor')
+  .description('Print environment and hook diagnostics for troubleshooting')
+  .action(() => runDoctor());
 
 program
   .command('uninstall')

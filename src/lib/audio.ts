@@ -82,7 +82,7 @@ function runBlocking(command: string, args: string[], timeoutMs = 7000): boolean
       windowsHide: true,
       timeout: timeoutMs,
     });
-    return !result.error;
+    return !result.error && result.status === 0;
   } catch {
     return false;
   }
@@ -271,6 +271,39 @@ function playLinux(filePath: string, mode: PlaybackMode): PlaybackResult {
   }
 
   return NO_PLAYBACK;
+}
+
+export function detectAvailablePlaybackBackend(): PlaybackBackend {
+  if (process.platform === 'darwin') {
+    return isCommandAvailable('afplay', ['-h']) ? 'afplay' : 'none';
+  }
+
+  if (process.platform === 'win32') {
+    if (isCommandAvailable('wscript.exe', ['//?'])) return 'mshta-wmp';
+    if (isCommandAvailable('ffplay.exe')) return 'ffplay';
+    if (
+      isCommandAvailable('powershell.exe', [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '$PSVersionTable.PSVersion.ToString()',
+      ])
+    ) {
+      return 'powershell';
+    }
+    return 'none';
+  }
+
+  if (process.platform === 'linux') {
+    if (isCommandAvailable('paplay', ['--version'])) return 'paplay';
+    if (isCommandAvailable('ffplay', ['-version'])) return 'ffplay';
+    if (isCommandAvailable('aplay', ['--version'])) return 'aplay';
+    if (isCommandAvailable('mpg123', ['--version'])) return 'mpg123';
+    return 'none';
+  }
+
+  return 'none';
 }
 
 export function playSound(ref: SoundRef, options: PlaybackOptions = {}): PlaybackResult {
