@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { execFileSync, spawn, spawnSync } from 'child_process';
 import { SoundRef } from './config.js';
 import { resolveBuiltinPath, resolveCustomPath } from './sounds.js';
@@ -36,6 +38,20 @@ function runDetached(command: string, args: string[]): boolean {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
+    }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runDetachedNoHide(command: string, args: string[]): boolean {
+  try {
+    spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      // No windowsHide — wscript //B is already invisible by design.
+      // windowsHide sets CREATE_NO_WINDOW which breaks COM initialization for GUI hosts.
     }).unref();
     return true;
   } catch {
@@ -86,25 +102,33 @@ function playMacOS(filePath: string, mode: PlaybackMode): PlaybackResult {
     : NO_PLAYBACK;
 }
 
-function buildMshtaScript(filePath: string): string {
-  const escapedPath = filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+function buildVbsScript(filePath: string): string {
+  const escaped = filePath.replace(/"/g, '""');
   return [
-    'javascript:try{',
-    'window.moveTo(-32000,-32000);window.resizeTo(0,0);',
-    "window.player=new ActiveXObject('WMPlayer.OCX.7');",
-    'window.player.settings.autoStart=false;',
-    'window.player.settings.volume=100;',
-    `window.player.URL='${escapedPath}';`,
-    'window.player.controls.play();',
-    'setTimeout(function(){try{window.player.controls.stop();}catch(e){} close();},4000);',
-    '}catch(e){close();}',
-  ].join('');
+    'Dim oPlayer',
+    'Set oPlayer = CreateObject("WMPlayer.OCX.7")',
+    'oPlayer.settings.autoStart = False',
+    'oPlayer.settings.volume = 100',
+    `oPlayer.URL = "${escaped}"`,
+    'oPlayer.controls.play()',
+    'WScript.Sleep 4000',
+    'oPlayer.controls.stop()',
+    'Set oPlayer = Nothing',
+    'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName',
+  ].join('\r\n');
 }
 
-function playWindowsMshta(filePath: string, mode: PlaybackMode): PlaybackResult {
-  return runCommand('mshta.exe', [buildMshtaScript(filePath)], mode, 6000)
-    ? { started: true, backend: 'mshta-wmp' }
-    : NO_PLAYBACK;
+function playWindowsWscript(filePath: string, mode: PlaybackMode): PlaybackResult {
+  const tmpFile = path.join(os.tmpdir(), `pushpop-${Date.now()}.vbs`);
+  try {
+    fs.writeFileSync(tmpFile, buildVbsScript(filePath), 'utf8');
+  } catch {
+    return NO_PLAYBACK;
+  }
+  const ok = mode === 'preview'
+    ? runBlocking('wscript.exe', ['//B', '//Nologo', tmpFile], 6000)
+    : runDetachedNoHide('wscript.exe', ['//B', '//Nologo', tmpFile]);
+  return ok ? { started: true, backend: 'mshta-wmp' } : NO_PLAYBACK;
 }
 
 function playWindowsFfplay(filePath: string, mode: PlaybackMode): PlaybackResult {
@@ -143,11 +167,11 @@ function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
   const backends = mode === 'preview'
     ? [
         () => playWindowsFfplay(filePath, mode),
-        () => playWindowsMshta(filePath, mode),
+        () => playWindowsWscript(filePath, mode),
         () => playWindowsPowershell(filePath, mode),
       ]
     : [
-        () => playWindowsMshta(filePath, mode),
+        () => playWindowsWscript(filePath, mode),
         () => playWindowsFfplay(filePath, mode),
         () => playWindowsPowershell(filePath, mode),
       ];

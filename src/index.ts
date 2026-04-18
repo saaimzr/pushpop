@@ -57,7 +57,22 @@ program
 
 // Default: interactive dashboard
 if (process.argv.length === 2) {
-  runDashboard().catch(() => process.exit(0));
+  const cleanup = () => {
+    try {
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+    } catch {}
+    process.stdout.write('\x1B[?25h'); // restore cursor visibility
+  };
+
+  process.on('SIGINT', () => {
+    cleanup();
+    process.stdout.write('\n');
+    process.exit(0);
+  });
+
+  runDashboard()
+    .then(() => { cleanup(); process.exit(0); })
+    .catch(() => { cleanup(); process.exit(0); });
 } else {
   program.parseAsync().catch(() => process.exit(1));
 }

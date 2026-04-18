@@ -12,7 +12,7 @@ import {
   isDevUploadLimitBypassed,
   isPro,
 } from '../lib/license.js';
-import { banner, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
+import { banner, clearScreen, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
 import { runUpload } from './upload.js';
 import { runActivate } from './activate.js';
 import { runUninstall } from './uninstall.js';
@@ -56,7 +56,7 @@ function getStatusLines(): { label: string; value: string }[] {
 }
 
 function printHeader(extraLines: string[] = []): void {
-  console.clear();
+  clearScreen();
   console.log('');
   console.log(banner(version));
   console.log('');
