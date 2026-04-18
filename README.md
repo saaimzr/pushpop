@@ -2,7 +2,7 @@
 
 > Play a short producer-style audio tag every time you `git commit` or `git push`.
 
-pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports custom uploads, and now works across macOS, Windows, and Linux boxes that have a usable local audio backend.
+pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports custom uploads, and works across macOS, Windows, and Linux boxes that have a usable local audio backend.
 
 ## Install
 
@@ -30,8 +30,8 @@ pushpop
 | --- | --- |
 | `pushpop` | Open the interactive dashboard |
 | `pushpop init` | Install global Git hooks and set `core.hooksPath` |
-| `pushpop upload <file>` | Add a custom audio file (`.mp3`, `.wav`, `.m4a`) |
-| `pushpop activate <key>` | Unlock Pro with your Lemon Squeezy license key |
+| `pushpop upload <file>` | Add a custom audio file with preview (`.mp3`, `.wav`, `.m4a`) |
+| `pushpop activate <key>` | Unlock Pro with your Polar license key |
 | `pushpop doctor` | Print troubleshooting details about audio, hooks, and config |
 | `pushpop uninstall` | Remove hooks, config, and attempt to remove the global CLI |
 
@@ -39,9 +39,10 @@ pushpop
 
 - Interactive terminal dashboard for sound assignment
 - Built-in sound packs across General, Gaming, Nature, Sci-Fi, and Producer Tags
-- Custom uploads with automatic truncation to the first 3 seconds when `ffmpeg` is available
+- Custom uploads with preview-before-save
+- Automatic truncation to the first 3 seconds when `ffmpeg` is available
 - Runtime volume control with presets from `0%` to `100%`
-- Remove-assignment flow for clearing commit or push sounds
+- Pro-only custom sound management for deleting uploaded sounds
 - Global Git hook installation with repo-hook chaining
 
 ## Platform support
@@ -60,8 +61,10 @@ Linux caveats:
 
 Custom uploads accept `.mp3`, `.wav`, and `.m4a`.
 
+- pushpop always warns before save that custom tags are limited to 3 seconds.
 - Files longer than 3 seconds are truncated to the first 3 seconds with `ffmpeg -t 3 -y`.
-- If `ffmpeg` is missing, long uploads are rejected with a clear error instead of silently failing.
+- If `ffmpeg` is missing, long uploads are rejected with a clear install/trim message.
+- Before save, you can preview the final tag, confirm and save, or cancel.
 
 ## Dashboard notes
 
@@ -74,21 +77,34 @@ The dashboard status panel shows:
 
 If an assigned custom file is deleted manually, pushpop shows `(file missing)` in the dashboard and stays silent during Git events.
 
+The dashboard also includes:
+
+- `Help / Info` with a quick explanation of how pushpop works
+- `Manage custom sounds` for Pro users to delete uploaded files they no longer want
+
 ## Free vs Pro
 
 | | Free | Pro |
 | --- | --- | --- |
 | Built-in sound packs | All genres | All genres |
-| Custom uploads | 2 max | Unlimited |
+| Custom uploads | 2 lifetime uploads | Unlimited |
+| Manage custom sounds | No | Yes |
 | Price | Free | $1.49 one-time |
 
-Local and development builds in this repo still use a placeholder Lemon Squeezy URL. Until the real buy URL is set before publish, the CLI will show a "coming soon" style paywall message instead of a live checkout link.
+Upgrade with Polar:
 
-Once you have a key:
+- Checkout: `https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS`
+- Activate after purchase: `pushpop activate YOUR-LICENSE-KEY`
 
-```bash
-pushpop activate YOUR-LICENSE-KEY
+## Config and persistence
+
+pushpop stores its local state in:
+
+```text
+~/.pushpop/config.json
 ```
+
+This includes assignments, volume, Pro status, and the free-tier lifetime custom upload counter.
 
 ## Hooks and Git behavior
 
@@ -114,6 +130,7 @@ This command:
 - restores your previous `core.hooksPath` if one was set
 - removes pushpop hook files
 - clears `~/.pushpop`
+- clears the legacy pre-migration config location if present
 - attempts to run `npm uninstall -g pushpopper` in the background
 
 If pushpop cannot safely remove the global install automatically, it falls back to printing the manual command.
@@ -132,8 +149,10 @@ The doctor output includes:
 - Node and Git versions
 - `ffmpeg` availability
 - detected audio backend
+- config path
 - installed hook files and executable state
 - current assignments, including missing-file flags
+- lifetime upload count
 - volume and Pro status
 - resolved pushpop binary path
 

@@ -1,24 +1,57 @@
 import fetch from 'node-fetch';
+import * as os from 'os';
 import { getConfig, setConfig } from './config.js';
 
-const LS_ACTIVATE_URL = 'https://api.lemonsqueezy.com/v1/licenses/activate';
-export const LEMONSQUEEZY_URL = 'https://pushpop.lemonsqueezy.com/buy/YOUR_PRODUCT_ID'; // set before publishing
+const POLAR_ACTIVATE_URL = 'https://api.polar.sh/v1/customer-portal/license-keys/activate';
+export const POLAR_ORGANIZATION_ID = 'b3ed864a-0edc-4390-b3ed-c191848843e5';
+export const POLAR_CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS';
 export const FEEDBACK_EMAIL = 'saaim.raad3@gmail.com';
 export const PRICE = '$1.49 USD';
 
-export const FREE_TIER_LIMIT = 2; // custom uploads only; built-ins are unlimited
+export const FREE_TIER_LIMIT = 2;
 
-interface LemonSqueezyResponse {
-  activated: boolean;
-  error: string | null;
+interface PolarActivationResponse {
+  id: string;
+  label?: string;
   license_key?: {
-    status: string;
-    key: string;
+    id?: string;
+    key?: string;
+    display_key?: string;
+    status?: string;
+    last_validated_at?: string | null;
+    expires_at?: string | null;
   };
-  instance?: {
-    id: string;
-    name: string;
-  };
+}
+
+function getPolarErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const record = payload as Record<string, unknown>;
+
+  if (typeof record.detail === 'string') {
+    return record.detail;
+  }
+
+  if (typeof record.error === 'string') {
+    return record.error;
+  }
+
+  if (Array.isArray(record.detail)) {
+    const messages = record.detail
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+
+        const detailRecord = entry as Record<string, unknown>;
+        return typeof detailRecord.msg === 'string' ? detailRecord.msg : null;
+      })
+      .filter((message): message is string => Boolean(message));
+
+    if (messages.length > 0) {
+      return messages.join('; ');
+    }
+  }
+
+  return null;
 }
 
 export async function validateAndActivateLicense(key: string): Promise<void> {
@@ -28,46 +61,66 @@ export async function validateAndActivateLicense(key: string): Promise<void> {
     throw new Error('Invalid license key format');
   }
 
-  let data: LemonSqueezyResponse;
+  let payload: unknown;
 
   try {
-    const res = await fetch(LS_ACTIVATE_URL, {
+    const response = await fetch(POLAR_ACTIVATE_URL, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        license_key: trimmedKey,
-        instance_name: 'pushpop-cli',
+        key: trimmedKey,
+        organization_id: POLAR_ORGANIZATION_ID,
+        label: os.hostname(),
       }),
     });
 
-    if (!res.ok && res.status !== 400) {
-      throw new Error('Could not reach the license server. Check your internet connection.');
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
     }
 
-    try {
-      data = (await res.json()) as LemonSqueezyResponse;
-    } catch {
-      throw new Error('License server returned an unexpected response. Try again.');
+    if (!response.ok) {
+      throw new Error(
+        getPolarErrorMessage(payload)
+        ?? 'License key is invalid or has already reached its activation limit.',
+      );
     }
-  } catch (e: unknown) {
-    if (e instanceof Error && e.message.includes('license server')) throw e;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name !== 'FetchError') {
+      throw error;
+    }
+
     throw new Error('Network error validating license. Check your internet connection.');
   }
 
-  if (!data.activated) {
-    throw new Error(data.error ?? 'License key is invalid or has already reached its activation limit.');
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('License server returned an unexpected response. Try again.');
+  }
+
+  const data = payload as PolarActivationResponse;
+
+  if (typeof data.id !== 'string' || data.id.length === 0) {
+    throw new Error('License server returned an unexpected response. Try again.');
+  }
+
+  if (data.license_key?.status && data.license_key.status !== 'granted') {
+    throw new Error('License key is not active.');
   }
 
   const nowIso = new Date().toISOString();
   setConfig({
     pro: true,
     licenseKey: trimmedKey,
-    licenseInstanceId: data.instance?.id,
+    licenseActivationId: data.id,
     activatedAt: nowIso,
-    lastValidatedAt: nowIso,
+    lastValidatedAt:
+      typeof data.license_key?.last_validated_at === 'string'
+        ? data.license_key.last_validated_at
+        : nowIso,
   });
 }
 

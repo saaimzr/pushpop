@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { getConfig, HOOKS_DIR } from '../lib/config.js';
+import { CONFIG_PATH, getConfig, getLifetimeCustomUploads, HOOKS_DIR } from '../lib/config.js';
 import { detectAvailablePlaybackBackend, isFfmpegAvailable, resolveSoundPath } from '../lib/audio.js';
 import { resolvePushpopBinaryPath } from '../lib/hooks.js';
 import { isPro } from '../lib/license.js';
@@ -61,11 +61,13 @@ export function runDoctor(): void {
     `ffmpeg: ${ffmpeg}`,
     `audio backend: ${backend}`,
     `pushpop bin: ${binaryPath}`,
+    `config: ${CONFIG_PATH}`,
     `post-commit hook: ${describeHook('post-commit')}`,
     `pre-push hook: ${describeHook('pre-push')}`,
     formatAssignment('commit'),
     formatAssignment('push'),
     `volume: ${config.volume ?? 70}%`,
+    `lifetime uploads: ${getLifetimeCustomUploads()}`,
     `pro: ${isPro() ? 'yes' : 'no'}`,
     `last validated: ${config.lastValidatedAt ?? 'n/a'}`,
   ];

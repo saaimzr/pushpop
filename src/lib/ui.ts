@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import boxen from 'boxen';
-import { LEMONSQUEEZY_URL, PRICE } from './license.js';
+import { POLAR_CHECKOUT_URL, PRICE } from './license.js';
 
 const P = chalk.hex('#9B59B6');   // purple brand color
 const W = chalk.white;
@@ -14,10 +14,10 @@ export const white = W;
 export const dim = DIM;
 export const warnColor = WARN;
 
-// \x1B[2J clears the visible viewport; \x1B[3J also clears scrollback so repeated
-// redraws don't accumulate in the terminal's history.
+// Clear only the visible viewport and move the cursor home. This keeps the
+// terminal scrollback intact while preserving the existing prompt redraw flow.
 export function clearScreen(): void {
-  process.stdout.write('\x1B[2J\x1B[3J\x1B[0;0H');
+  process.stdout.write('\x1B[2J\x1B[0;0H');
 }
 
 let altScreenActive = false;
@@ -184,41 +184,25 @@ export async function animatePreview(durationMs: number): Promise<void> {
   process.stdout.write(`\r${' '.repeat(40)}\r`);
 }
 
-function isPlaceholderLsUrl(url: string): boolean {
-  return url.includes('YOUR_PRODUCT_ID');
-}
-
 export function showPaywall(context: 'inline' | 'box' = 'box'): void {
-  const urlReady = !isPlaceholderLsUrl(LEMONSQUEEZY_URL);
 
   if (context === 'inline') {
     console.log('');
     console.log(`  ${P('⚠')}  ${W('Custom upload limit reached (2/2)')}`);
-    if (urlReady) {
-      console.log(`  ${DIM('Unlock unlimited for')} ${P(PRICE)} ${DIM('→')} ${DIM(LEMONSQUEEZY_URL)}`);
-      console.log(`  ${DIM('Then run:')} ${P('pushpop activate <key>')}`);
-    } else {
-      console.log(`  ${DIM('Pro upgrade link coming soon — check back shortly.')}`);
-    }
+    console.log(`  ${DIM('Unlock unlimited for')} ${P(PRICE)} ${DIM('→')} ${DIM(POLAR_CHECKOUT_URL)}`);
+    console.log(`  ${DIM('Then run:')} ${P('pushpop activate <key>')}`);
     console.log('');
     return;
   }
 
-  const boxBody = urlReady
-    ? [
-        `${W('Custom upload limit reached')} ${DIM('(2/2 slots used)')}`,
-        '',
-        `${W('Unlock unlimited uploads for')} ${P(PRICE)}`,
-        `${DIM(LEMONSQUEEZY_URL)}`,
-        '',
-        `${DIM('Then run:')} ${P('pushpop activate <your-license-key>')}`,
-      ].join('\n')
-    : [
-        `${W('Custom upload limit reached')} ${DIM('(2/2 slots used)')}`,
-        '',
-        `${W('Pro upgrade link coming soon.')}`,
-        `${DIM('Until then, back up existing uploads and check for a new release.')}`,
-      ].join('\n');
+  const boxBody = [
+    `${W('Custom upload limit reached')} ${DIM('(2/2 slots used)')}`,
+    '',
+    `${W('Unlock unlimited uploads for')} ${P(PRICE)}`,
+    `${DIM(POLAR_CHECKOUT_URL)}`,
+    '',
+    `${DIM('Then run:')} ${P('pushpop activate <your-license-key>')}`,
+  ].join('\n');
 
   console.log('');
   console.log(

@@ -2,13 +2,21 @@ import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { getConfig, setConfig, getCustomUploadCount, getVolume, HOOKS_DIR } from '../lib/config.js';
+import {
+  clearAssignmentsForCustomFile,
+  CUSTOM_DIR,
+  getConfig,
+  getLifetimeCustomUploads,
+  getVolume,
+  HOOKS_DIR,
+  setConfig,
+} from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
 import {
   FEEDBACK_EMAIL,
   FREE_TIER_LIMIT,
-  LEMONSQUEEZY_URL,
+  POLAR_CHECKOUT_URL,
   PRICE,
   isPro,
 } from '../lib/license.js';
@@ -16,7 +24,6 @@ import {
   animatePreview,
   banner,
   clearScreen,
-  enterAltScreen,
   statusPanel,
   ok,
   purple,
@@ -48,7 +55,7 @@ function formatAssignment(ref: SoundRef | undefined): string {
 
 function getStatusLines(): { label: string; value: string }[] {
   const { assignments } = getConfig();
-  const uploadCount = getCustomUploadCount();
+  const lifetimeUploads = getLifetimeCustomUploads();
   const volume = getVolume();
 
   const lines: { label: string; value: string }[] = [
@@ -60,10 +67,10 @@ function getStatusLines(): { label: string; value: string }[] {
   if (!isPro()) {
     lines.push({
       label: 'uploads',
-      value: white(`${uploadCount}/${FREE_TIER_LIMIT} custom slots used`),
+      value: white(`${lifetimeUploads}/${FREE_TIER_LIMIT} custom slots used`),
     });
   } else {
-    lines.push({ label: 'license', value: white('pro - unlimited uploads') });
+    lines.push({ label: 'plan', value: `${purple('[PRO]')} ${white('unlimited custom uploads')}` });
   }
 
   return lines;
@@ -97,7 +104,7 @@ function getAddCustomLines(): string[] {
     return [`  ${purple('∞')}  ${white('Pro - unlimited custom uploads')}`];
   }
 
-  return [`  ${dim(`Custom uploads: ${getCustomUploadCount()}/${FREE_TIER_LIMIT} slots used`)}`];
+  return [`  ${dim(`Custom uploads: ${getLifetimeCustomUploads()}/${FREE_TIER_LIMIT} slots used`)}`];
 }
 
 function openFilePicker(): string | null {
@@ -280,21 +287,14 @@ async function setVolumeLevel(): Promise<void> {
 
 async function addCustomSound(): Promise<void> {
   while (true) {
-    const uploadCount = getCustomUploadCount();
+    const lifetimeUploads = getLifetimeCustomUploads();
 
-    if (!isPro() && uploadCount >= FREE_TIER_LIMIT) {
-      const urlReady = !LEMONSQUEEZY_URL.includes('YOUR_PRODUCT_ID');
-      const paywallLines = urlReady
-        ? [
-            `  ${warnColor(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
-            `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('->')} ${dim(LEMONSQUEEZY_URL)}`,
-            `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
-          ]
-        : [
-            `  ${warnColor(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
-            `  ${dim('Pro upgrade link coming soon - set the Lemon Squeezy URL before publish.')}`,
-          ];
-      printHeader(paywallLines);
+    if (!isPro() && lifetimeUploads >= FREE_TIER_LIMIT) {
+      printHeader([
+        `  ${warnColor(`Custom upload limit reached (${lifetimeUploads}/${FREE_TIER_LIMIT} slots)`)}`,
+        `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('->')} ${dim(POLAR_CHECKOUT_URL)}`,
+        `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+      ]);
       await sleep(2500);
       return;
     }
@@ -345,7 +345,7 @@ async function addCustomSound(): Promise<void> {
 
     const retry = await navSelect({
       frame: getFrame(),
-      message: white('Upload failed. Try again?'),
+      message: white('Upload not completed. Try again?'),
       choices: [
         { name: white('Yes'), value: true as boolean },
         { name: white('No'), value: false as boolean },
@@ -354,6 +354,87 @@ async function addCustomSound(): Promise<void> {
 
     if (retry === NAV_BACK || retry === false) return;
   }
+}
+
+async function manageCustomSounds(): Promise<void> {
+  while (true) {
+    const customSounds = getCustomSounds();
+
+    if (customSounds.length === 0) {
+      await navSelect({
+        frame: getFrame([
+          `  ${dim('No custom sounds saved yet.')}`,
+          `  ${dim('Delete actions never restore free upload slots.')}`,
+        ]),
+        message: white('Press Enter to return.'),
+        choices: [{ name: `${purple('ƒ+?')}  Back`, value: 'back' as const }],
+      });
+      return;
+    }
+
+    const choice = await navSelect<string | '__back__'>({
+      frame: getFrame([`  ${dim('Deleting a sound removes the file but does not restore free upload slots.')}`]),
+      message: white('Choose a custom sound to delete:'),
+      choices: [
+        ...customSounds.map((sound) => ({
+          name: `  ${white(sound.name)}`,
+          value: sound.file,
+        })),
+        { name: `${purple('ƒ+?')}  Back`, value: '__back__' },
+      ],
+      pageSize: 10,
+    });
+
+    if (choice === NAV_BACK || choice === '__back__') return;
+
+    const sound = customSounds.find((item) => item.file === choice);
+    if (!sound) continue;
+
+    const confirmDelete = await navSelect<boolean>({
+      frame: getFrame([
+        `  ${warnColor(`Delete "${sound.name}"?`)}`,
+        `  ${dim('This removes the file and clears any commit/push assignment using it.')}`,
+        `  ${dim('Free upload slots are lifetime-based and will not be restored.')}`,
+      ]),
+      message: white('Confirm deletion:'),
+      choices: [
+        { name: white('Delete'), value: true as boolean },
+        { name: white('Cancel'), value: false as boolean },
+      ],
+    });
+
+    if (confirmDelete === NAV_BACK || confirmDelete === false) continue;
+
+    try {
+      const fullPath = path.join(CUSTOM_DIR, sound.file);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+
+      clearAssignmentsForCustomFile(sound.file);
+      ok(`Deleted "${sound.name}"`);
+      await sleep(900);
+    } catch (error: unknown) {
+      printHeader([`  ${warnColor(error instanceof Error ? error.message : String(error))}`]);
+      await sleep(1600);
+    }
+  }
+}
+
+async function showHelpInfo(): Promise<void> {
+  await navSelect({
+    frame: getFrame([
+      `  ${white('pushpop plays short audio tags when you git commit and git push.')}`,
+      '',
+      `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
+      `  ${dim('After that, every repo on this machine works without per-project setup.')}`,
+      '',
+      `  ${white('Upgrade to Pro:')} ${dim(POLAR_CHECKOUT_URL)}`,
+      `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+    ]),
+    message: white('Press Enter to return.'),
+    choices: [{ name: `${purple('ƒ+?')}  Back`, value: 'back' as const }],
+  });
 }
 
 async function shareFeedback(): Promise<void> {
@@ -376,7 +457,7 @@ async function activateLicense(): Promise<void> {
   while (true) {
     const result = await navInput({
       frame: getFrame(),
-      message: white('Enter your Lemon Squeezy license key:'),
+      message: white('Enter your Polar license key:'),
       validate: (value) => value.trim().length >= 8 || 'Key too short',
     });
 
@@ -416,9 +497,17 @@ async function promptInitMissing(): Promise<'init' | 'exit'> {
 }
 
 export async function runDashboard(): Promise<void> {
-  type MenuChoice = 'commit' | 'push' | 'volume' | 'upload' | 'activate' | 'feedback' | 'uninstall' | 'exit';
-
-  enterAltScreen();
+  type MenuChoice =
+    | 'commit'
+    | 'push'
+    | 'volume'
+    | 'upload'
+    | 'manage'
+    | 'activate'
+    | 'help'
+    | 'feedback'
+    | 'uninstall'
+    | 'exit';
 
   if (!hooksInstalled()) {
     const answer = await promptInitMissing();
@@ -437,12 +526,14 @@ export async function runDashboard(): Promise<void> {
         { name: `${purple('⚙')}  Set push sound`, value: 'push' },
         { name: `${purple('◐')}  Set volume`, value: 'volume' },
         { name: `${purple('♫')}  Add custom sound`, value: 'upload' },
-        { name: `${purple('🔓')}  Activate license`, value: 'activate' },
+        ...(isPro() ? [{ name: `${purple('⌫')}  Manage custom sounds`, value: 'manage' as const }] : []),
+        { name: `${purple('◇')}  Activate license`, value: 'activate' },
+        { name: `${purple('ⓘ')}  Help / Info`, value: 'help' },
         { name: `${purple('✎')}  Share feedback`, value: 'feedback' },
         { name: `${purple('⌦')}  Uninstall`, value: 'uninstall' },
         { name: `${purple('✕')}  Exit`, value: 'exit' },
       ],
-      pageSize: 9,
+      pageSize: 11,
     });
 
     if (choice === NAV_BACK || choice === 'exit') break;
@@ -462,8 +553,18 @@ export async function runDashboard(): Promise<void> {
       continue;
     }
 
+    if (choice === 'manage') {
+      await manageCustomSounds();
+      continue;
+    }
+
     if (choice === 'activate') {
       await activateLicense();
+      continue;
+    }
+
+    if (choice === 'help') {
+      await showHelpInfo();
       continue;
     }
 

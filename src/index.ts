@@ -35,7 +35,7 @@ program
 
 program
   .command('upload <file>')
-  .description('Upload an audio file as a custom sound (max 3s; longer files are auto-truncated)')
+  .description('Upload an audio file as a custom sound with preview (max 3s; longer files are auto-truncated)')
   .option('-n, --name <name>', 'Custom sound name (defaults to filename)')
   .action(async (file: string, opts: { name?: string }) => {
     const success = await runUpload(file, opts);
@@ -50,7 +50,7 @@ program
 
 program
   .command('activate <key>')
-  .description('Activate a Lemon Squeezy license key to unlock pro (unlimited uploads)')
+  .description('Activate a Polar license key to unlock pro (unlimited uploads)')
   .action((key: string) => runActivate(key));
 
 program

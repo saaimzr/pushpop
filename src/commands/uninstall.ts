@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
-import { PUSHPOP_DIR } from '../lib/config.js';
+import { deleteLegacyConfigFile, LEGACY_CONFIG_PATH, PUSHPOP_DIR } from '../lib/config.js';
 import { unsetGlobalHooksPath, removeHooks } from '../lib/hooks.js';
 import { scheduleSelfUninstall } from '../lib/self-uninstall.js';
 import { purple, white, dim, exitClean, exitAltScreen } from '../lib/ui.js';
@@ -59,6 +59,11 @@ export async function runUninstall(): Promise<void> {
     } catch {
       console.log(`  ${dim(`Could not delete ${PUSHPOP_DIR}.`)}`);
     }
+  }
+
+  if (fs.existsSync(LEGACY_CONFIG_PATH)) {
+    deleteLegacyConfigFile();
+    check('Clearing legacy config...');
   }
 
   const { spawned, manualCommand } = scheduleSelfUninstall();
