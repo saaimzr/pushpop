@@ -31,6 +31,10 @@ function getStatusLines(): { label: string; value: string }[] {
 
   const lines: { label: string; value: string }[] = [
     {
+      label: 'add',
+      value: assignments.add ? `♪  ${assignments.add.name}` : '(none set)',
+    },
+    {
       label: 'commit',
       value: assignments.commit ? `♪  ${assignments.commit.name}` : '(none set)',
     },
@@ -124,7 +128,7 @@ function openFilePicker(): string | null {
 
 async function pickFromList(
   items: { ref: SoundRef; label: string }[],
-  event: 'commit' | 'push'
+  event: 'add' | 'commit' | 'push'
 ): Promise<'selected' | 'back'> {
   const choices = [
     ...items.map((item) => ({ name: `  ${white(item.label)}`, value: item.ref as SoundRef | null })),
@@ -171,7 +175,7 @@ async function pickFromList(
   }
 }
 
-async function pickSound(event: 'commit' | 'push'): Promise<void> {
+async function pickSound(event: 'add' | 'commit' | 'push'): Promise<void> {
   const genres = getAllGenres();
   const customSounds = getCustomSounds();
 
@@ -319,13 +323,14 @@ async function activateLicense(): Promise<void> {
 }
 
 export async function runDashboard(): Promise<void> {
-  type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
+  type MenuChoice = 'add' | 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
 
   while (true) {
     const choice = await navSelect<MenuChoice>({
       frame: getFrame(),
       message: white('What do you want to do?'),
       choices: [
+        { name: `${purple('▸')}  Set add sound`, value: 'add' },
         { name: `${purple('▸')}  Set commit sound`, value: 'commit' },
         { name: `${purple('▸')}  Set push sound`, value: 'push' },
         { name: `${purple('⊕')}  Add custom sound`, value: 'upload' },
@@ -338,7 +343,7 @@ export async function runDashboard(): Promise<void> {
 
     if (choice === NAV_BACK || choice === 'exit') break;
 
-    if (choice === 'commit' || choice === 'push') {
+    if (choice === 'add' || choice === 'commit' || choice === 'push') {
       await pickSound(choice);
       continue;
     }

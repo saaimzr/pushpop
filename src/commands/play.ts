@@ -1,7 +1,7 @@
 import { getConfig } from '../lib/config.js';
 import { playSound } from '../lib/audio.js';
 
-type Event = 'commit' | 'push';
+type Event = 'add' | 'commit' | 'push';
 
 export function runPlay(event: Event): void {
   const { assignments } = getConfig();

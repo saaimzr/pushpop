@@ -10,6 +10,7 @@ export interface SoundRef {
 }
 
 export interface Assignments {
+  add?: SoundRef;
   commit?: SoundRef;
   push?: SoundRef;
 }
