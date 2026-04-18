@@ -1,9 +1,12 @@
 import { createRequire } from 'module';
+import * as fs from 'fs';
+import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { getConfig, setConfig, getCustomUploadCount } from '../lib/config.js';
+import { getConfig, setConfig, getCustomUploadCount, HOOKS_DIR } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
 import {
+  FEEDBACK_URL,
   FREE_TIER_LIMIT,
   LEMONSQUEEZY_URL,
   PRICE,
@@ -11,7 +14,18 @@ import {
   isDevUploadLimitBypassed,
   isPro,
 } from '../lib/license.js';
-import { banner, clearScreen, enterAltScreen, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
+import {
+  animatePreview,
+  banner,
+  clearScreen,
+  enterAltScreen,
+  openUrl,
+  statusPanel,
+  ok,
+  purple,
+  white,
+  dim,
+} from '../lib/ui.js';
 import { navSelect, navInput, NAV_BACK } from '../lib/nav-select.js';
 import { runUpload } from './upload.js';
 import { runActivate } from './activate.js';
@@ -123,7 +137,7 @@ function openFilePicker(): string | null {
 }
 
 async function pickFromList(
-  items: { ref: SoundRef; label: string }[],
+  items: { ref: SoundRef; label: string; durationSec?: number }[],
   event: 'commit' | 'push'
 ): Promise<'selected' | 'back'> {
   const choices = [
@@ -141,14 +155,23 @@ async function pickFromList(
 
     if (chosen === NAV_BACK || chosen === null) return 'back';
 
+    const chosenItem = items.find((it) => it.ref === chosen);
     const filePath = resolveSoundPath(chosen);
     let previewLine = `  ${dim('(audio file not found)')}`;
 
     if (filePath) {
-      const playback = playSound(chosen, { mode: 'preview' });
-      previewLine = playback.started
-        ? `  ${purple('♪')}  Played: ${white(chosen.name)}`
-        : `  ${purple('⚠')}  Preview unavailable on this system`;
+      // Background mode so spawn returns immediately and we can animate
+      // music-note frames while the sound plays.
+      const playback = playSound(chosen, { mode: 'background' });
+      if (playback.started) {
+        clearScreen();
+        console.log(getFrame([`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`]));
+        const durationMs = ((chosenItem?.durationSec ?? 3) + 0.5) * 1000;
+        await animatePreview(durationMs);
+        previewLine = `  ${purple('♪')}  Played: ${white(chosen.name)}`;
+      } else {
+        previewLine = `  ${purple('⚠')}  Preview unavailable on this system`;
+      }
     }
 
     const useIt = await navSelect({
@@ -218,7 +241,8 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
 
       soundItems = sounds.map((sound) => ({
         ref: { type: 'builtin' as const, name: sound.name, file: sound.file },
-        label: `${sound.name}  ${dim(`(${sound.durationSec}s)`)}`,
+        label: sound.name,
+        durationSec: sound.durationSec,
       }));
     }
 
@@ -305,6 +329,31 @@ async function addCustomSound(): Promise<void> {
   }
 }
 
+async function shareFeedback(): Promise<void> {
+  const urlReady = !FEEDBACK_URL.includes('YOUR_FEEDBACK_FORM_ID');
+  const bodyLines: string[] = [];
+
+  if (urlReady) {
+    const opened = openUrl(FEEDBACK_URL);
+    bodyLines.push(`  ${purple('♡')}  ${white('Thanks for helping shape pushpop!')}`);
+    bodyLines.push('');
+    if (opened) {
+      bodyLines.push(`  ${dim('Your browser should open the feedback form.')}`);
+    } else {
+      bodyLines.push(`  ${dim('Could not launch your browser. Open this link:')}`);
+    }
+    bodyLines.push(`  ${purple(FEEDBACK_URL)}`);
+  } else {
+    bodyLines.push(`  ${purple('♡')}  ${white('Thanks for trying pushpop!')}`);
+    bodyLines.push('');
+    bodyLines.push(`  ${dim('Feedback form is coming in the next release.')}`);
+    bodyLines.push(`  ${dim('For now, email:')} ${purple('saaim.raad3@gmail.com')}`);
+  }
+
+  printHeader(bodyLines);
+  await sleep(3500);
+}
+
 async function activateLicense(): Promise<void> {
   while (true) {
     const result = await navInput({
@@ -325,10 +374,42 @@ async function activateLicense(): Promise<void> {
   }
 }
 
+function hooksInstalled(): boolean {
+  return (
+    fs.existsSync(path.join(HOOKS_DIR, 'post-commit')) &&
+    fs.existsSync(path.join(HOOKS_DIR, 'pre-push'))
+  );
+}
+
+async function promptInitMissing(): Promise<'init' | 'exit'> {
+  const choice = await navSelect<'init' | 'exit'>({
+    frame: getFrame([
+      `  ${purple('⚠')}  ${white('pushpop is not set up on this machine yet.')}`,
+      `  ${dim('Hooks are missing — sounds will not play on git commit/push.')}`,
+    ]),
+    message: white('Run setup now?'),
+    choices: [
+      { name: `${purple('▸')}  Run setup (pushpop init)`, value: 'init' },
+      { name: `${purple('✕')}  Exit`, value: 'exit' },
+    ],
+  });
+  if (choice === NAV_BACK) return 'exit';
+  return choice;
+}
+
 export async function runDashboard(): Promise<void> {
-  type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
+  type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'feedback' | 'uninstall' | 'exit';
 
   enterAltScreen();
+
+  if (!hooksInstalled()) {
+    const answer = await promptInitMissing();
+    if (answer === 'exit') return;
+    // Lazy-import so we don't pull init's file writes into normal dashboard flow.
+    const { runInit } = await import('./init.js');
+    runInit();
+    await sleep(1200);
+  }
 
   while (true) {
     const choice = await navSelect<MenuChoice>({
@@ -339,6 +420,7 @@ export async function runDashboard(): Promise<void> {
         { name: `${purple('▸')}  Set push sound`, value: 'push' },
         { name: `${purple('⊕')}  Add custom sound`, value: 'upload' },
         { name: `${purple('⌿')}  Activate license`, value: 'activate' },
+        { name: `${purple('✎')}  Share feedback`, value: 'feedback' },
         { name: `${purple('⊗')}  Uninstall`, value: 'uninstall' },
         { name: `${purple('✕')}  Exit`, value: 'exit' },
       ],
@@ -359,6 +441,11 @@ export async function runDashboard(): Promise<void> {
 
     if (choice === 'activate') {
       await activateLicense();
+      continue;
+    }
+
+    if (choice === 'feedback') {
+      await shareFeedback();
       continue;
     }
 

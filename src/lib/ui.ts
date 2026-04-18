@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import boxen from 'boxen';
@@ -70,11 +71,15 @@ export function banner(version: string): string {
   }
 
   const title = figlet.textSync('pushpop', { font: 'Small', horizontalLayout: 'default' });
+  // Mascot frame: each line is exactly 27 columns wide so the right-hand
+  // decorations line up with the left. Musical-note glyphs (♫ ♪ ♬) render
+  // as single-cell in every modern terminal we target (Windows Terminal,
+  // Terminal.app, iTerm2, VS Code), so plain character counting works.
   const mascot = [
     '♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪',
-    '♪    ╭─────────────╮      ♪',
-    '♫   ▐██▌  ◕ ‿ ◕  ▐██▌    ♫',
-    '♪                          ♪',
+    '♪     ╭─────────────╮     ♪',
+    '♫    ▐██▌  ◕ ‿ ◕  ▐██▌    ♫',
+    '♪                         ♪',
     '♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫',
   ].join('\n');
 
@@ -114,6 +119,49 @@ export function fail(msg: string): void {
 
 export function note(msg: string): void {
   console.log(`${P('♪')}  ${W(msg)}`);
+}
+
+/**
+ * Open a URL in the user's default browser. Returns true if the launch
+ * command succeeded (does not guarantee the browser actually opened).
+ */
+export function openUrl(url: string): boolean {
+  try {
+    if (process.platform === 'win32') {
+      // On Windows, `start` is a cmd builtin. The empty "" is a required
+      // window-title placeholder so `start` doesn't mis-parse a quoted URL.
+      execFileSync('cmd', ['/c', 'start', '""', url], { stdio: 'ignore' });
+    } else if (process.platform === 'darwin') {
+      execFileSync('open', [url], { stdio: 'ignore' });
+    } else {
+      execFileSync('xdg-open', [url], { stdio: 'ignore' });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Simple inline animation (writes with `\r` to overwrite one line).
+ * Shows cycling music-note frames for `durationMs`, then erases the line.
+ * Safe to call while other output is queued — only touches the current line.
+ */
+export async function animatePreview(durationMs: number): Promise<void> {
+  const frames = [
+    '♪ ♫ ♬ ♫ ♪ ♬ ♪ ♫',
+    '♫ ♬ ♪ ♬ ♫ ♪ ♫ ♬',
+    '♬ ♪ ♫ ♪ ♬ ♫ ♬ ♪',
+    '♫ ♬ ♪ ♬ ♫ ♪ ♫ ♬',
+  ];
+  const start = Date.now();
+  let i = 0;
+  while (Date.now() - start < durationMs) {
+    process.stdout.write(`\r  ${P(frames[i % frames.length])}   ${DIM('previewing…')}   `);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    i++;
+  }
+  process.stdout.write(`\r${' '.repeat(40)}\r`);
 }
 
 function isPlaceholderLsUrl(url: string): boolean {

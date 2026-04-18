@@ -24,7 +24,7 @@ export async function runUninstall(): Promise<void> {
   }
 
   unsetGlobalHooksPath();
-  ok('Removed core.hooksPath from global git config');
+  ok('Restored previous core.hooksPath in global git config');
 
   removeHooks();
   ok('Removed hook scripts');
@@ -34,6 +34,9 @@ export async function runUninstall(): Promise<void> {
     ok(`Removed ${PUSHPOP_DIR}`);
   }
 
-  console.log('\n  pushpop has been uninstalled. Your git workflow is restored.\n');
-  warn('Your custom audio files have been deleted. Back them up first if you want to keep them.');
+  console.log('\n  pushpop has been deactivated. Your git workflow is restored.');
+  console.log('  Custom audio files in ~/.pushpop/custom were deleted — back up first if you want them.\n');
+  console.log('  The pushpop command is still installed globally. To remove it entirely, run:');
+  console.log('    npm uninstall -g pushpopper\n');
+  warn('If you run `pushpop` again without uninstalling the npm package, it will prompt you to re-run setup.');
 }

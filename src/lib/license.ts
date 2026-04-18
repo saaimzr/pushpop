@@ -3,6 +3,7 @@ import { getConfig, setConfig } from './config.js';
 
 const LS_ACTIVATE_URL = 'https://api.lemonsqueezy.com/v1/licenses/activate';
 export const LEMONSQUEEZY_URL = 'https://pushpop.lemonsqueezy.com/buy/YOUR_PRODUCT_ID'; // set before publishing
+export const FEEDBACK_URL = 'https://forms.gle/YOUR_FEEDBACK_FORM_ID'; // set before publishing
 export const PRICE = '$1.29 USD';
 
 export const FREE_TIER_LIMIT = 2; // custom uploads only; built-ins are unlimited
