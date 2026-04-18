@@ -7,6 +7,7 @@ import { ok, warn } from '../lib/ui.js';
 function confirm(question: string): Promise<boolean> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('error', () => { rl.close(); resolve(false); });
     rl.question(question, (ans) => {
       rl.close();
       resolve(ans.trim().toLowerCase() === 'y');

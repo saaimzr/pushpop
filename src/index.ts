@@ -28,7 +28,10 @@ program
   .command('upload <file>')
   .description('Upload an audio file as a custom sound (≤3s; longer files are auto-truncated)')
   .option('-n, --name <name>', 'Custom sound name (defaults to filename)')
-  .action((file: string, opts: { name?: string }) => runUpload(file, opts));
+  .action(async (file: string, opts: { name?: string }) => {
+    const success = await runUpload(file, opts);
+    if (!success) process.exit(1);
+  });
 
 program
   .command('use <sound>')

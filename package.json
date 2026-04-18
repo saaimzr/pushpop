@@ -1,6 +1,6 @@
 {
-  "name": "pushpop",
-  "version": "0.1.0",
+  "name": "pushpopper",
+  "version": "0.1.1",
   "description": "Producer-style audio tags for your git commits and pushes",
   "type": "module",
   "main": "dist/index.js",
@@ -21,9 +21,14 @@
     "hooks",
     "audio",
     "developer-tools",
-    "cli"
+    "cli",
+    "sound",
+    "commit",
+    "push",
+    "producer-tag",
+    "git-hooks"
   ],
-  "author": "pushpop",
+  "author": "saaimzr",
   "license": "MIT",
   "dependencies": {
     "@inquirer/prompts": "^7.5.0",

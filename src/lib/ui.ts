@@ -11,19 +11,25 @@ export const purple = P;
 export const white = W;
 export const dim = DIM;
 
+export function clearScreen(): void {
+  process.stdout.write('\x1B[2J\x1B[0;0H');
+}
+
 export function banner(version: string): string {
   const title = figlet.textSync('pushpop', { font: 'Small', horizontalLayout: 'default' });
-  const dj = [
-    '      ╭─────────────╮',
-    '     ▐██▌  ◕ ‿ ◕  ▐██▌',
-    '            ♪ ♫ ♬',
+  const mascot = [
+    '♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪',
+    '♪    ╭─────────────╮      ♪',
+    '♫   ▐██▌  ◕ ‿ ◕  ▐██▌    ♫',
+    '♪                          ♪',
+    '♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫',
   ].join('\n');
 
   return [
     P(title),
     P(`                         v${version}`),
     '',
-    P(dj),
+    P(mascot),
   ].join('\n');
 }
 

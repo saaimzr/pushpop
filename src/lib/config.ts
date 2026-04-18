@@ -40,7 +40,7 @@ export function getConfig(): PushpopConfig {
     licenseKey: conf.get('licenseKey'),
     licenseInstanceId: conf.get('licenseInstanceId'),
     activatedAt: conf.get('activatedAt'),
-    assignments: conf.get('assignments'),
+    assignments: conf.get('assignments') ?? {},
   };
 }
 
@@ -67,6 +67,11 @@ export function getCustomSoundFiles(): string[] {
 }
 
 export function ensureDirs(): void {
-  fs.mkdirSync(CUSTOM_DIR, { recursive: true });
-  fs.mkdirSync(HOOKS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(CUSTOM_DIR, { recursive: true });
+    fs.mkdirSync(HOOKS_DIR, { recursive: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Could not create ~/.pushpop directory. Check permissions.\n  ${msg}`);
+  }
 }

@@ -12,7 +12,7 @@ export async function runActivate(key: string): Promise<void> {
     ok('pushpop pro unlocked — unlimited custom uploads enabled');
     console.log(`\n  ${purple('♪')}  Drop your sounds. No limits.\n`);
   } catch (e: unknown) {
-    spinner.fail((e as Error).message);
+    spinner.fail(e instanceof Error ? e.message : String(e));
     process.exit(1);
   }
 }

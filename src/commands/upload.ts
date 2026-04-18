@@ -8,10 +8,14 @@ import { isFfmpegAvailable, truncateAudio } from '../lib/audio.js';
 import { isPro, FREE_TIER_LIMIT } from '../lib/license.js';
 import { ok, warn, fail, showPaywall } from '../lib/ui.js';
 
-export async function runUpload(filePath: string, opts: { name?: string }): Promise<void> {
-  if (!fs.existsSync(filePath)) {
-    fail(`File not found: ${filePath}`);
-    process.exit(1);
+// Returns true on success, false on any failure (never calls process.exit — caller decides)
+export async function runUpload(filePath: string, opts: { name?: string }): Promise<boolean> {
+  // Strip surrounding quotes users sometimes paste with the path
+  const normalized = filePath.replace(/^["']+|["']+$/g, '').trim();
+
+  if (!fs.existsSync(normalized)) {
+    fail(`File not found: ${normalized}`);
+    return false;
   }
 
   ensureDirs();
@@ -21,53 +25,58 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
 
   if (!pro && uploadCount >= FREE_TIER_LIMIT) {
     showPaywall('box');
-    process.exit(1);
+    return false;
   }
 
   const spinner = ora({ text: 'Reading audio file...', color: 'magenta' }).start();
 
   let info: Awaited<ReturnType<typeof getAudioInfo>>;
   try {
-    info = await getAudioInfo(filePath);
+    info = await getAudioInfo(normalized);
   } catch (e: unknown) {
-    spinner.fail((e as Error).message);
-    process.exit(1);
+    spinner.fail(e instanceof Error ? e.message : String(e));
+    return false;
   }
 
   const tagName = opts.name
-    ? opts.name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase()
-    : path.basename(filePath, info.ext);
+    ? opts.name.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()
+    : path.basename(normalized, info.ext);
 
   const destPath = path.join(CUSTOM_DIR, `${tagName}${info.ext}`);
 
-  let srcPath = filePath;
+  let srcPath = normalized;
 
   if (info.durationSec > MAX_DURATION_SEC) {
     if (!isFfmpegAvailable()) {
       spinner.warn(
         `File is ${info.durationSec.toFixed(1)}s (max ${MAX_DURATION_SEC}s). Install ffmpeg to enable auto-truncation, or trim the file manually.`
       );
-      process.exit(1);
+      return false;
     }
 
     spinner.text = `Truncating to first ${MAX_DURATION_SEC}s...`;
     const tmpPath = path.join(os.tmpdir(), `pushpop-${Date.now()}${info.ext}`);
     try {
-      truncateAudio(filePath, tmpPath, MAX_DURATION_SEC);
+      truncateAudio(normalized, tmpPath, MAX_DURATION_SEC);
       srcPath = tmpPath;
+      spinner.succeed(
+        `File was ${info.durationSec.toFixed(1)}s — truncated to first ${MAX_DURATION_SEC}s`
+      );
     } catch {
       spinner.fail('ffmpeg truncation failed. Try trimming the file manually to ≤3 seconds.');
-      process.exit(1);
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      return false;
     }
-
-    spinner.succeed(
-      `File was ${info.durationSec.toFixed(1)}s — truncated to first ${MAX_DURATION_SEC}s`
-    );
   } else {
     spinner.succeed(`Audio validated (${info.durationSec.toFixed(1)}s)`);
   }
 
-  fs.copyFileSync(srcPath, destPath);
+  try {
+    fs.copyFileSync(srcPath, destPath);
+  } finally {
+    if (srcPath !== normalized && fs.existsSync(srcPath)) fs.unlinkSync(srcPath);
+  }
+
   ok(`Saved as "${tagName}" → ${destPath}`);
 
   const newCount = getCustomUploadCount();
@@ -80,5 +89,5 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
     }
   }
 
-  console.log(`\n  Run pushpop to assign it to commit or push.`);
+  return true;
 }

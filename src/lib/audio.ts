@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { execFileSync, spawnSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 import { SoundRef } from './config.js';
 import { resolveBuiltinPath, resolveCustomPath } from './sounds.js';
 
@@ -17,19 +17,26 @@ export function resolveSoundPath(ref: SoundRef): string | null {
 }
 
 function playMacOS(filePath: string): void {
-  execFileSync('afplay', [filePath], { stdio: 'ignore' });
+  spawn('afplay', [filePath], { detached: true, stdio: 'ignore' }).unref();
 }
 
 function playWindows(filePath: string): void {
-  const normalized = filePath.replace(/\\/g, '/');
+  // Use WMPlayer COM object — works headless without a WPF dispatcher
+  const escaped = filePath.replace(/'/g, "''"); // escape single quotes for PowerShell
   const script = [
-    'Add-Type -AssemblyName presentationCore;',
-    '$p = New-Object system.windows.media.mediaplayer;',
-    `$p.open([uri]"file:///${normalized}");`,
-    '$p.Play();',
-    'Start-Sleep -Milliseconds 4000;',
+    `$wmp = New-Object -ComObject WMPlayer.OCX.7;`,
+    `$wmp.settings.autoStart = $false;`,
+    `$wmp.settings.volume = 100;`,
+    `$wmp.URL = '${escaped}';`,
+    `Start-Sleep -Milliseconds 200;`,
+    `$wmp.controls.play();`,
+    `Start-Sleep -Seconds 4;`,
   ].join(' ');
-  spawnSync('powershell', ['-NoProfile', '-Command', script], { stdio: 'ignore' });
+  spawn(
+    'powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+    { detached: true, stdio: 'ignore' }
+  ).unref();
 }
 
 export function playSound(ref: SoundRef): void {
@@ -44,8 +51,9 @@ export function playFilePath(filePath: string): void {
     playMacOS(filePath);
   } else if (platform === 'win32') {
     playWindows(filePath);
+  } else {
+    console.warn('[pushpop] Audio playback is not supported on this platform (macOS and Windows only).');
   }
-  // linux: v1.1
 }
 
 export function isFfmpegAvailable(): boolean {
