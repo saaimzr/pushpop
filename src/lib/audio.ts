@@ -4,9 +4,14 @@ import { SoundRef } from './config.js';
 import { resolveBuiltinPath, resolveCustomPath } from './sounds.js';
 
 export type PlaybackBackend = 'afplay' | 'mshta-wmp' | 'ffplay' | 'powershell' | 'none';
+export type PlaybackMode = 'background' | 'preview';
 export interface PlaybackResult {
   started: boolean;
   backend: PlaybackBackend;
+}
+
+interface PlaybackOptions {
+  mode?: PlaybackMode;
 }
 
 const NO_PLAYBACK: PlaybackResult = { started: false, backend: 'none' };
@@ -24,7 +29,7 @@ export function resolveSoundPath(ref: SoundRef): string | null {
   }
 }
 
-function spawnDetached(command: string, args: string[]): boolean {
+function runDetached(command: string, args: string[]): boolean {
   try {
     spawn(command, args, {
       detached: true,
@@ -35,6 +40,25 @@ function spawnDetached(command: string, args: string[]): boolean {
   } catch {
     return false;
   }
+}
+
+function runBlocking(command: string, args: string[], timeoutMs = 7000): boolean {
+  try {
+    const result = spawnSync(command, args, {
+      stdio: 'ignore',
+      windowsHide: true,
+      timeout: timeoutMs,
+    });
+    return !result.error;
+  } catch {
+    return false;
+  }
+}
+
+function runCommand(command: string, args: string[], mode: PlaybackMode, timeoutMs?: number): boolean {
+  return mode === 'preview'
+    ? runBlocking(command, args, timeoutMs)
+    : runDetached(command, args);
 }
 
 function isCommandAvailable(command: string, probeArgs: string[] = ['-version']): boolean {
@@ -49,8 +73,8 @@ function isCommandAvailable(command: string, probeArgs: string[] = ['-version'])
   }
 }
 
-function playMacOS(filePath: string): PlaybackResult {
-  return spawnDetached('afplay', [filePath])
+function playMacOS(filePath: string, mode: PlaybackMode): PlaybackResult {
+  return runCommand('afplay', [filePath], mode, 7000)
     ? { started: true, backend: 'afplay' }
     : NO_PLAYBACK;
 }
@@ -59,32 +83,34 @@ function buildMshtaScript(filePath: string): string {
   const escapedPath = filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   return [
     'javascript:try{',
-    "var player=new ActiveXObject('WMPlayer.OCX.7');",
-    'player.settings.volume=100;',
-    `player.URL='${escapedPath}';`,
-    'player.controls.play();',
-    'setTimeout(function(){close();},4000);',
+    'window.moveTo(-32000,-32000);window.resizeTo(0,0);',
+    "window.player=new ActiveXObject('WMPlayer.OCX.7');",
+    'window.player.settings.autoStart=false;',
+    'window.player.settings.volume=100;',
+    `window.player.URL='${escapedPath}';`,
+    'window.player.controls.play();',
+    'setTimeout(function(){try{window.player.controls.stop();}catch(e){} close();},4000);',
     '}catch(e){close();}',
   ].join('');
 }
 
-function playWindowsMshta(filePath: string): PlaybackResult {
-  return spawnDetached('mshta.exe', [buildMshtaScript(filePath)])
+function playWindowsMshta(filePath: string, mode: PlaybackMode): PlaybackResult {
+  return runCommand('mshta.exe', [buildMshtaScript(filePath)], mode, 6000)
     ? { started: true, backend: 'mshta-wmp' }
     : NO_PLAYBACK;
 }
 
-function playWindowsFfplay(filePath: string): PlaybackResult {
+function playWindowsFfplay(filePath: string, mode: PlaybackMode): PlaybackResult {
   if (!isCommandAvailable('ffplay.exe')) {
     return NO_PLAYBACK;
   }
 
-  return spawnDetached('ffplay.exe', ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath])
+  return runCommand('ffplay.exe', ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath], mode, 7000)
     ? { started: true, backend: 'ffplay' }
     : NO_PLAYBACK;
 }
 
-function playWindowsPowershell(filePath: string): PlaybackResult {
+function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackResult {
   const escaped = filePath.replace(/'/g, "''");
   const script = [
     `$wmp = New-Object -ComObject WMPlayer.OCX.7;`,
@@ -96,16 +122,21 @@ function playWindowsPowershell(filePath: string): PlaybackResult {
     `Start-Sleep -Seconds 4;`,
   ].join(' ');
 
-  return spawnDetached('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script])
+  return runCommand(
+    'powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+    mode,
+    6000,
+  )
     ? { started: true, backend: 'powershell' }
     : NO_PLAYBACK;
 }
 
-function playWindows(filePath: string): PlaybackResult {
+function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
   const backends = [
-    () => playWindowsMshta(filePath),
-    () => playWindowsFfplay(filePath),
-    () => playWindowsPowershell(filePath),
+    () => playWindowsFfplay(filePath, mode),
+    () => playWindowsMshta(filePath, mode),
+    () => playWindowsPowershell(filePath, mode),
   ];
 
   for (const attempt of backends) {
@@ -118,20 +149,22 @@ function playWindows(filePath: string): PlaybackResult {
   return NO_PLAYBACK;
 }
 
-export function playSound(ref: SoundRef): PlaybackResult {
+export function playSound(ref: SoundRef, options: PlaybackOptions = {}): PlaybackResult {
   const filePath = resolveSoundPath(ref);
   if (!filePath) return NO_PLAYBACK;
-  return playFilePath(filePath);
+  return playFilePath(filePath, options);
 }
 
-export function playFilePath(filePath: string): PlaybackResult {
+export function playFilePath(filePath: string, options: PlaybackOptions = {}): PlaybackResult {
+  const mode = options.mode ?? 'background';
   const platform = process.platform;
+
   if (platform === 'darwin') {
-    return playMacOS(filePath);
+    return playMacOS(filePath, mode);
   }
 
   if (platform === 'win32') {
-    return playWindows(filePath);
+    return playWindows(filePath, mode);
   }
 
   return NO_PLAYBACK;

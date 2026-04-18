@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
 import { execFileSync } from 'child_process';
+import { confirm, input, select } from '@inquirer/prompts';
 import { getConfig, setConfig, getCustomUploadCount } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
@@ -11,8 +12,7 @@ import {
   isDevUploadLimitBypassed,
   isPro,
 } from '../lib/license.js';
-import { banner, statusPanel, ok, clearScreen, purple, white, dim } from '../lib/ui.js';
-import { navInput, navSelect, NAV_BACK } from '../lib/nav-select.js';
+import { banner, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
 import { runUpload } from './upload.js';
 import { runActivate } from './activate.js';
 import { runUninstall } from './uninstall.js';
@@ -20,6 +20,7 @@ import type { SoundRef } from '../lib/config.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../../package.json') as { version: string };
+const PROMPT_CONTEXT = { clearPromptOnDone: true } as const;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -54,31 +55,33 @@ function getStatusLines(): { label: string; value: string }[] {
   return lines;
 }
 
-function buildFrame(...sections: string[]): string {
-  const frame = [banner(version), '', statusPanel(getStatusLines())];
+function printHeader(extraLines: string[] = []): void {
+  console.clear();
+  console.log('');
+  console.log(banner(version));
+  console.log('');
+  console.log(statusPanel(getStatusLines()));
 
-  for (const section of sections.filter(Boolean)) {
-    frame.push('', section);
+  if (extraLines.length > 0) {
+    console.log('');
+    for (const line of extraLines) {
+      console.log(line);
+    }
   }
 
-  return frame.join('\n');
+  console.log('');
 }
 
-function showFrame(...sections: string[]): void {
-  clearScreen();
-  console.log(buildFrame(...sections));
-}
-
-function getAddSoundFrame(): string {
+function getAddCustomLines(): string[] {
   if (isDevUploadLimitBypassed()) {
-    return buildFrame(`  ${purple('◆')}  ${white('Dev mode — upload cap bypass active')}`);
+    return [`  ${purple('◆')}  ${white('Dev mode — upload cap bypass active')}`];
   }
 
   if (isPro()) {
-    return buildFrame(`  ${purple('◆')}  ${white('Pro — unlimited custom uploads')}`);
+    return [`  ${purple('◆')}  ${white('Pro — unlimited custom uploads')}`];
   }
 
-  return buildFrame(`  ${dim(`Custom uploads: ${getCustomUploadCount()}/${FREE_TIER_LIMIT} slots used`)}`);
+  return [`  ${dim(`Custom uploads: ${getCustomUploadCount()}/${FREE_TIER_LIMIT} slots used`)}`];
 }
 
 function openFilePicker(): string | null {
@@ -107,7 +110,7 @@ function openFilePicker(): string | null {
       return result.trim() || null;
     }
   } catch {
-    // User cancelled or dialog not available.
+    // User cancelled or dialog unavailable.
   }
 
   return null;
@@ -125,44 +128,46 @@ async function pickFromList(
   while (true) {
     let chosen: SoundRef | null;
     try {
-      const result = await navSelect({
-        frame: buildFrame(),
-        message: white('Choose a sound:'),
-        choices,
-        pageSize: 10,
-      });
-      if (result === NAV_BACK) return 'back';
-      chosen = result;
+      printHeader();
+      chosen = await select(
+        {
+          message: white('Choose a sound:'),
+          choices,
+          pageSize: 10,
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       return 'back';
     }
 
     if (!chosen) return 'back';
 
-    let previewLine = `  ${dim('(audio file not found)')}`;
     const filePath = resolveSoundPath(chosen);
+    let previewLine = `  ${dim('(audio file not found)')}`;
+
     if (filePath) {
-      const playback = playSound(chosen);
+      const playback = playSound(chosen, { mode: 'preview' });
       previewLine = playback.started
-        ? `  ${purple('♪')}  Previewing: ${white(chosen.name)} ${dim(`(${playback.backend})`)}`
+        ? `  ${purple('♪')}  Played: ${white(chosen.name)} ${dim(`(${playback.backend})`)}`
         : `  ${purple('⚠')}  Preview unavailable on this system`;
     }
 
-    let useIt: boolean | typeof NAV_BACK;
+    let useIt: boolean;
     try {
-      useIt = await navSelect({
-        frame: buildFrame(previewLine),
-        message: white(`Use "${chosen.name}" for ${purple(event)}?`),
-        choices: [
-          { name: white('Yes — assign it'), value: true as boolean },
-          { name: white('No — keep browsing'), value: false as boolean },
-        ],
-      });
+      printHeader([previewLine]);
+      useIt = await confirm(
+        {
+          message: white(`Use "${chosen.name}" for ${purple(event)}?`),
+          default: true,
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       continue;
     }
 
-    if (useIt === NAV_BACK || useIt === false) continue;
+    if (!useIt) continue;
 
     const { assignments } = getConfig();
     assignments[event] = chosen;
@@ -176,34 +181,40 @@ async function pickFromList(
 async function pickSound(event: 'commit' | 'push'): Promise<void> {
   const genres = getAllGenres();
   const customSounds = getCustomSounds();
-  const genreChoices: { name: string; value: string }[] = [];
-
-  if (customSounds.length > 0) {
-    genreChoices.push({ name: `${purple('◎')}  My uploads (${customSounds.length})`, value: '__custom__' });
-  }
-
-  for (const genre of genres) {
-    const suffix = genre.sounds.length === 0 ? dim(' (coming soon)') : '';
-    genreChoices.push({
-      name: `${purple(genre.symbol)}  ${white(genre.label)}${suffix}`,
-      value: genre.id,
-    });
-  }
 
   while (true) {
+    const genreChoices: { name: string; value: string }[] = [];
+
+    if (customSounds.length > 0) {
+      genreChoices.push({ name: `${purple('◎')}  My uploads (${customSounds.length})`, value: '__custom__' });
+    }
+
+    for (const genre of genres) {
+      const suffix = genre.sounds.length === 0 ? dim(' (coming soon)') : '';
+      genreChoices.push({
+        name: `${purple(genre.symbol)}  ${white(genre.label)}${suffix}`,
+        value: genre.id,
+      });
+    }
+
+    genreChoices.push({ name: `${purple('←')}  Back`, value: '__back__' });
+
     let genreId: string;
     try {
-      const result = await navSelect({
-        frame: buildFrame(),
-        message: white(`Choose a sound source for ${purple(event)}:`),
-        choices: genreChoices,
-        pageSize: 12,
-      });
-      if (result === NAV_BACK) return;
-      genreId = result;
+      printHeader();
+      genreId = await select(
+        {
+          message: white(`Choose a sound source for ${purple(event)}:`),
+          choices: genreChoices,
+          pageSize: 12,
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       return;
     }
+
+    if (genreId === '__back__') return;
 
     let soundItems: { ref: SoundRef; label: string }[];
 
@@ -215,7 +226,7 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
     } else {
       const sounds = getSoundsForGenre(genreId);
       if (sounds.length === 0) {
-        showFrame(`  ${purple('○')}  No sounds in this pack yet — check back soon.`);
+        printHeader([`  ${purple('○')}  No sounds in this pack yet — check back soon.`]);
         await sleep(1800);
         continue;
       }
@@ -234,41 +245,45 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
 async function addCustomSound(): Promise<void> {
   while (true) {
     const uploadCount = getCustomUploadCount();
+
     if (!hasUnlimitedUploads() && uploadCount >= FREE_TIER_LIMIT) {
-      showFrame(
+      printHeader([
         `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
         `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('→')} ${dim(LEMONSQUEEZY_URL)}`,
         `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
-      );
+      ]);
       await sleep(2500);
       return;
     }
 
     type UploadMethod = 'browse' | 'manual' | 'back';
-    let method: UploadMethod | typeof NAV_BACK;
+    let method: UploadMethod;
     try {
-      method = await navSelect<UploadMethod>({
-        frame: getAddSoundFrame(),
-        message: white('How do you want to add a sound?'),
-        choices: [
-          { name: `${purple('⊞')}  Browse files (open file picker)`, value: 'browse' },
-          { name: `${purple('⌨')}  Enter file path manually`, value: 'manual' },
-          { name: `${purple('←')}  Back`, value: 'back' },
-        ],
-      });
+      printHeader(getAddCustomLines());
+      method = await select(
+        {
+          message: white('How do you want to add a sound?'),
+          choices: [
+            { name: `${purple('⊞')}  Browse files (open file picker)`, value: 'browse' as const },
+            { name: `${purple('⌨')}  Enter file path manually`, value: 'manual' as const },
+            { name: `${purple('←')}  Back`, value: 'back' as const },
+          ],
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       return;
     }
 
-    if (method === NAV_BACK || method === 'back') return;
+    if (method === 'back') return;
 
     let filePath: string | null = null;
 
     if (method === 'browse') {
-      showFrame(`  ${dim('Opening file picker...')}`);
+      printHeader([...getAddCustomLines(), `  ${dim('Opening file picker...')}`]);
       filePath = openFilePicker();
       if (!filePath) {
-        showFrame(`  ${dim('No file selected.')}`);
+        printHeader([...getAddCustomLines(), `  ${dim('No file selected.')}`]);
         await sleep(800);
         continue;
       }
@@ -276,15 +291,15 @@ async function addCustomSound(): Promise<void> {
 
     if (method === 'manual') {
       try {
-        const result = await navInput({
-          frame: getAddSoundFrame(),
-          message: white('Path to your audio file (.mp3 / .wav / .m4a):'),
-          validate: (value) => value.trim().length > 0 || 'Please enter a file path',
-        });
-        if (result === NAV_BACK) {
-          continue;
-        }
-        filePath = result.trim();
+        printHeader(getAddCustomLines());
+        filePath = await input(
+          {
+            message: white('Path to your audio file (.mp3 / .wav / .m4a):'),
+            validate: (value) => value.trim().length > 0 || 'Please enter a file path',
+          },
+          PROMPT_CONTEXT,
+        );
+        filePath = filePath.trim();
       } catch {
         return;
       }
@@ -298,55 +313,39 @@ async function addCustomSound(): Promise<void> {
       return;
     }
 
-    let retry: boolean | typeof NAV_BACK;
+    let retry: boolean;
     try {
-      retry = await navSelect({
-        frame: buildFrame(),
-        message: white('What would you like to do?'),
-        choices: [
-          { name: white('Try again'), value: true as boolean },
-          { name: white('Go back to main menu'), value: false as boolean },
-        ],
-      });
+      printHeader();
+      retry = await confirm(
+        {
+          message: white('Try again?'),
+          default: true,
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       return;
     }
 
-    if (retry === NAV_BACK || retry === false) return;
+    if (!retry) return;
   }
 }
 
 async function activateLicense(): Promise<void> {
   while (true) {
-    type ActivateChoice = 'enter' | 'back';
-    let choice: ActivateChoice | typeof NAV_BACK;
+    let key: string;
     try {
-      choice = await navSelect<ActivateChoice>({
-        frame: buildFrame(),
-        message: white('License activation'),
-        choices: [
-          { name: `${purple('⌿')}  Enter license key`, value: 'enter' },
-          { name: `${purple('←')}  Back`, value: 'back' },
-        ],
-      });
+      printHeader();
+      key = await input(
+        {
+          message: white('Enter your Lemon Squeezy license key:'),
+          validate: (value) => value.trim().length >= 8 || 'Key too short',
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       return;
     }
-
-    if (choice === NAV_BACK || choice === 'back') return;
-
-    let key: string | typeof NAV_BACK;
-    try {
-      key = await navInput({
-        frame: buildFrame(),
-        message: white('Enter your Lemon Squeezy license key:'),
-        validate: (value) => value.trim().length >= 8 || 'Key too short',
-      });
-    } catch {
-      continue;
-    }
-
-    if (key === NAV_BACK) continue;
 
     try {
       await runActivate(key.trim(), { exitOnError: false });
@@ -362,28 +361,29 @@ export async function runDashboard(): Promise<void> {
   while (true) {
     type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
 
-    const choices: { name: string; value: MenuChoice }[] = [
-      { name: `${purple('▸')}  Set commit sound`, value: 'commit' },
-      { name: `${purple('▸')}  Set push sound`, value: 'push' },
-      { name: `${purple('⊕')}  Add custom sound`, value: 'upload' },
-      { name: `${purple('⌿')}  Activate license`, value: 'activate' },
-      { name: `${purple('⊗')}  Uninstall`, value: 'uninstall' },
-      { name: `${purple('✕')}  Exit`, value: 'exit' },
-    ];
-
-    let choice: MenuChoice | typeof NAV_BACK;
+    let choice: MenuChoice;
     try {
-      choice = await navSelect({
-        frame: buildFrame(),
-        message: white('What do you want to do?'),
-        choices,
-        pageSize: 8,
-      });
+      printHeader();
+      choice = await select(
+        {
+          message: white('What do you want to do?'),
+          choices: [
+            { name: `${purple('▸')}  Set commit sound`, value: 'commit' as const },
+            { name: `${purple('▸')}  Set push sound`, value: 'push' as const },
+            { name: `${purple('⊕')}  Add custom sound`, value: 'upload' as const },
+            { name: `${purple('⌿')}  Activate license`, value: 'activate' as const },
+            { name: `${purple('⊗')}  Uninstall`, value: 'uninstall' as const },
+            { name: `${purple('✕')}  Exit`, value: 'exit' as const },
+          ],
+          pageSize: 8,
+        },
+        PROMPT_CONTEXT,
+      );
     } catch {
       break;
     }
 
-    if (choice === NAV_BACK || choice === 'exit') break;
+    if (choice === 'exit') break;
 
     if (choice === 'commit' || choice === 'push') {
       await pickSound(choice);
