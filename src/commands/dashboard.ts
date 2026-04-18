@@ -149,7 +149,7 @@ async function pickFromList(
     if (filePath) {
       const playback = playSound(chosen, { mode: 'preview' });
       previewLine = playback.started
-        ? `  ${purple('♪')}  Played: ${white(chosen.name)} ${dim(`(${playback.backend})`)}`
+        ? `  ${purple('♪')}  Played: ${white(chosen.name)}`
         : `  ${purple('⚠')}  Preview unavailable on this system`;
     }
 

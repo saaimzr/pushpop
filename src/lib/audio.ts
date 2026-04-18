@@ -15,6 +15,7 @@ interface PlaybackOptions {
 }
 
 const NO_PLAYBACK: PlaybackResult = { started: false, backend: 'none' };
+const AUDIO_DEBUG_ENV = 'PUSHPOP_DEBUG_AUDIO';
 
 export function resolveSoundPath(ref: SoundRef): string | null {
   const fullPath = ref.type === 'builtin'
@@ -59,6 +60,12 @@ function runCommand(command: string, args: string[], mode: PlaybackMode, timeout
   return mode === 'preview'
     ? runBlocking(command, args, timeoutMs)
     : runDetached(command, args);
+}
+
+function debugAudio(message: string): void {
+  if (process.env[AUDIO_DEBUG_ENV] === '1') {
+    console.error(`[pushpop audio] ${message}`);
+  }
 }
 
 function isCommandAvailable(command: string, probeArgs: string[] = ['-version']): boolean {
@@ -133,14 +140,21 @@ function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackRe
 }
 
 function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
-  const backends = [
-    () => playWindowsFfplay(filePath, mode),
-    () => playWindowsMshta(filePath, mode),
-    () => playWindowsPowershell(filePath, mode),
-  ];
+  const backends = mode === 'preview'
+    ? [
+        () => playWindowsFfplay(filePath, mode),
+        () => playWindowsMshta(filePath, mode),
+        () => playWindowsPowershell(filePath, mode),
+      ]
+    : [
+        () => playWindowsMshta(filePath, mode),
+        () => playWindowsFfplay(filePath, mode),
+        () => playWindowsPowershell(filePath, mode),
+      ];
 
   for (const attempt of backends) {
     const result = attempt();
+    debugAudio(`windows mode=${mode} backend=${result.backend} started=${String(result.started)}`);
     if (result.started) {
       return result;
     }

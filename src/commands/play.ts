@@ -8,7 +8,7 @@ export function runPlay(event: Event): void {
   const soundRef = assignments[event];
 
   if (soundRef) {
-    playSound(soundRef);
+    playSound(soundRef, { mode: 'background' });
   }
-  // silent if no sound configured — never break git workflow
+  // Silent if no sound configured; never break git workflow.
 }
