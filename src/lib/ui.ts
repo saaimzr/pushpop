@@ -6,6 +6,7 @@ import { LEMONSQUEEZY_URL, PRICE } from './license.js';
 const P = chalk.hex('#9B59B6');   // purple brand color
 const W = chalk.white;
 const DIM = chalk.dim;
+//test
 
 export const purple = P;
 export const white = W;
