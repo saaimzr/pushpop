@@ -1,0 +1,64 @@
+{
+  "version": "1",
+  "genres": [
+    {
+      "id": "general",
+      "label": "General",
+      "symbol": "○",
+      "sounds": [
+        { "id": "achievement", "name": "Achievement", "file": "general/achievement.mp3", "durationSec": 2 },
+        { "id": "crowd-cheer", "name": "Crowd Cheer", "file": "general/crowd cheer.mp3", "durationSec": 2 },
+        { "id": "gong", "name": "Gong", "file": "general/gong.mp3", "durationSec": 2 },
+        { "id": "kaching", "name": "Ka-Ching", "file": "general/kaching.mp3", "durationSec": 1 }
+      ]
+    },
+    {
+      "id": "gaming",
+      "label": "Gaming",
+      "symbol": "◈",
+      "sounds": [
+        { "id": "coin-pickup", "name": "Coin Pickup", "file": "gaming/coin pickup.mp3", "durationSec": 1 },
+        { "id": "golden-ring", "name": "Golden Ring", "file": "gaming/golden ring.mp3", "durationSec": 1 },
+        { "id": "jump-up", "name": "Jump Up", "file": "gaming/jump up.mp3", "durationSec": 1 },
+        { "id": "level-up", "name": "Level Up", "file": "gaming/level up.mp3", "durationSec": 2 },
+        { "id": "machine-gun", "name": "Machine Gun", "file": "gaming/machine gun.mp3", "durationSec": 2 },
+        { "id": "mario-yapping", "name": "Mario Yapping", "file": "gaming/mario yapping.mp3", "durationSec": 2 },
+        { "id": "missile", "name": "Missile", "file": "gaming/missile.mp3", "durationSec": 2 },
+        { "id": "terminated", "name": "Terminated", "file": "gaming/terminated.wav", "durationSec": 2 }
+      ]
+    },
+    {
+      "id": "nature",
+      "label": "Nature",
+      "symbol": "≋",
+      "sounds": [
+        { "id": "thunder", "name": "Thunder", "file": "nature/thunder.mp3", "durationSec": 2 },
+        { "id": "water-drop", "name": "Water Drop", "file": "nature/water drop.mp3", "durationSec": 1 }
+      ]
+    },
+    {
+      "id": "sci-fi",
+      "label": "Sci-Fi",
+      "symbol": "◉",
+      "sounds": [
+        { "id": "laser-gun", "name": "Laser Gun", "file": "sci-fi/laser gun.mp3", "durationSec": 1 },
+        { "id": "synth", "name": "Synth", "file": "sci-fi/synth.mp3", "durationSec": 2 },
+        { "id": "teleport", "name": "Teleport", "file": "sci-fi/teleport.mp3", "durationSec": 1 }
+      ]
+    },
+    {
+      "id": "producer-tags",
+      "label": "Producer Tags",
+      "symbol": "♫",
+      "sounds": [
+        { "id": "808-mafia", "name": "808 Mafia", "file": "producer tags/808 Mafia.mp3", "durationSec": 2 },
+        { "id": "big-khaled-1", "name": "Big Khaled 1", "file": "producer tags/Big Khaled 1.mp3", "durationSec": 2 },
+        { "id": "big-khaled-2", "name": "Big Khaled 2", "file": "producer tags/Big Khaled 2.mp3", "durationSec": 2 },
+        { "id": "big-ms", "name": "BIG Ms", "file": "producer tags/BIG Ms.mp3", "durationSec": 2 },
+        { "id": "mike-will-made-it", "name": "Mike Will Made It", "file": "producer tags/Mike Will Made It.mp3", "durationSec": 2 },
+        { "id": "wake-up-filthy", "name": "Wake Up Filthy", "file": "producer tags/Wake Up Filthy.mp3", "durationSec": 2 },
+        { "id": "yo-pierre", "name": "Yo Pierre", "file": "producer tags/Yo Pierre.mp3", "durationSec": 2 }
+      ]
+    }
+  ]
+}
