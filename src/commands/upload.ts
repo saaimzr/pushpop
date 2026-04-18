@@ -5,12 +5,11 @@ import ora from 'ora';
 import { CUSTOM_DIR, getCustomUploadCount, ensureDirs } from '../lib/config.js';
 import { getAudioInfo, MAX_DURATION_SEC } from '../lib/validate.js';
 import { isFfmpegAvailable, truncateAudio } from '../lib/audio.js';
-import { isPro, FREE_TIER_LIMIT } from '../lib/license.js';
+import { FREE_TIER_LIMIT, hasUnlimitedUploads, isDevUploadLimitBypassed, isPro } from '../lib/license.js';
 import { ok, warn, fail, showPaywall } from '../lib/ui.js';
 
-// Returns true on success, false on any failure (never calls process.exit — caller decides)
+// Returns true on success, false on any failure (never calls process.exit; caller decides)
 export async function runUpload(filePath: string, opts: { name?: string }): Promise<boolean> {
-  // Strip surrounding quotes users sometimes paste with the path
   const normalized = filePath.replace(/^["']+|["']+$/g, '').trim();
 
   if (!fs.existsSync(normalized)) {
@@ -22,8 +21,9 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
 
   const uploadCount = getCustomUploadCount();
   const pro = isPro();
+  const unlimitedUploads = hasUnlimitedUploads();
 
-  if (!pro && uploadCount >= FREE_TIER_LIMIT) {
+  if (!unlimitedUploads && uploadCount >= FREE_TIER_LIMIT) {
     showPaywall('box');
     return false;
   }
@@ -33,8 +33,8 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
   let info: Awaited<ReturnType<typeof getAudioInfo>>;
   try {
     info = await getAudioInfo(normalized);
-  } catch (e: unknown) {
-    spinner.fail(e instanceof Error ? e.message : String(e));
+  } catch (error: unknown) {
+    spinner.fail(error instanceof Error ? error.message : String(error));
     return false;
   }
 
@@ -49,7 +49,7 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
   if (info.durationSec > MAX_DURATION_SEC) {
     if (!isFfmpegAvailable()) {
       spinner.warn(
-        `File is ${info.durationSec.toFixed(1)}s (max ${MAX_DURATION_SEC}s). Install ffmpeg to enable auto-truncation, or trim the file manually.`
+        `File is ${info.durationSec.toFixed(1)}s (max ${MAX_DURATION_SEC}s). Install ffmpeg to enable auto-truncation, or trim the file manually.`,
       );
       return false;
     }
@@ -59,11 +59,9 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
     try {
       truncateAudio(normalized, tmpPath, MAX_DURATION_SEC);
       srcPath = tmpPath;
-      spinner.succeed(
-        `File was ${info.durationSec.toFixed(1)}s — truncated to first ${MAX_DURATION_SEC}s`
-      );
+      spinner.succeed(`File was ${info.durationSec.toFixed(1)}s — truncated to first ${MAX_DURATION_SEC}s`);
     } catch {
-      spinner.fail('ffmpeg truncation failed. Try trimming the file manually to ≤3 seconds.');
+      spinner.fail(`ffmpeg truncation failed. Try trimming the file manually to ${MAX_DURATION_SEC} seconds.`);
       if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
       return false;
     }
@@ -74,13 +72,15 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
   try {
     fs.copyFileSync(srcPath, destPath);
   } finally {
-    if (srcPath !== normalized && fs.existsSync(srcPath)) fs.unlinkSync(srcPath);
+    if (srcPath !== normalized && fs.existsSync(srcPath)) {
+      fs.unlinkSync(srcPath);
+    }
   }
 
   ok(`Saved as "${tagName}" → ${destPath}`);
 
   const newCount = getCustomUploadCount();
-  if (!pro) {
+  if (!pro && !isDevUploadLimitBypassed()) {
     const remaining = FREE_TIER_LIMIT - newCount;
     if (remaining > 0) {
       console.log(`\n  Custom uploads: ${newCount}/${FREE_TIER_LIMIT} slots used (${remaining} remaining)`);

@@ -6,6 +6,7 @@ export const LEMONSQUEEZY_URL = 'https://pushpop.lemonsqueezy.com/buy/YOUR_PRODU
 export const PRICE = '$1.29 USD';
 
 export const FREE_TIER_LIMIT = 2; // custom uploads only; built-ins are unlimited
+const DEV_UPLOAD_BYPASS_ENV = 'PUSHPOP_DEV_BYPASS_UPLOAD_LIMIT';
 
 interface LemonSqueezyResponse {
   activated: boolean;
@@ -70,4 +71,13 @@ export async function validateAndActivateLicense(key: string): Promise<void> {
 
 export function isPro(): boolean {
   return getConfig().pro === true;
+}
+
+// DEV ONLY: remove before release.
+export function isDevUploadLimitBypassed(): boolean {
+  return process.env[DEV_UPLOAD_BYPASS_ENV] === '1';
+}
+
+export function hasUnlimitedUploads(): boolean {
+  return isPro() || isDevUploadLimitBypassed();
 }

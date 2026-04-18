@@ -1,8 +1,12 @@
 import ora from 'ora';
 import { validateAndActivateLicense } from '../lib/license.js';
-import { ok, fail, purple } from '../lib/ui.js';
+import { ok, purple } from '../lib/ui.js';
 
-export async function runActivate(key: string): Promise<void> {
+export async function runActivate(
+  key: string,
+  options: { exitOnError?: boolean } = {},
+): Promise<void> {
+  const { exitOnError = true } = options;
   const spinner = ora({ text: 'Validating license key...', color: 'magenta' }).start();
 
   try {
@@ -11,8 +15,11 @@ export async function runActivate(key: string): Promise<void> {
     console.log('');
     ok('pushpop pro unlocked — unlimited custom uploads enabled');
     console.log(`\n  ${purple('♪')}  Drop your sounds. No limits.\n`);
-  } catch (e: unknown) {
-    spinner.fail(e instanceof Error ? e.message : String(e));
-    process.exit(1);
+  } catch (error: unknown) {
+    spinner.fail(error instanceof Error ? error.message : String(error));
+    if (exitOnError) {
+      process.exit(1);
+    }
+    throw error;
   }
 }
