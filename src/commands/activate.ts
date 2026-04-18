@@ -1,7 +1,7 @@
 import ora from 'ora';
 import { validateAndActivateLicense } from '../lib/license.js';
 import { ok, purple } from '../lib/ui.js';
-// test1
+// test12
 export async function runActivate(
   key: string,
   options: { exitOnError?: boolean } = {},
