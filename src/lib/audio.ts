@@ -111,7 +111,7 @@ function buildVbsScript(filePath: string): string {
     'oPlayer.settings.volume = 100',
     `oPlayer.URL = "${escaped}"`,
     'oPlayer.controls.play()',
-    'WScript.Sleep 4000',
+    'WScript.Sleep 5000',
     'oPlayer.controls.stop()',
     'Set oPlayer = Nothing',
     'CreateObject("Scripting.FileSystemObject").DeleteFile WScript.ScriptFullName',
@@ -126,7 +126,7 @@ function playWindowsWscript(filePath: string, mode: PlaybackMode): PlaybackResul
     return NO_PLAYBACK;
   }
   const ok = mode === 'preview'
-    ? runBlocking('wscript.exe', ['//B', '//Nologo', tmpFile], 6000)
+    ? runBlocking('wscript.exe', ['//B', '//Nologo', tmpFile], 7000)
     : runDetachedNoHide('wscript.exe', ['//B', '//Nologo', tmpFile]);
   return ok ? { started: true, backend: 'mshta-wmp' } : NO_PLAYBACK;
 }
@@ -150,14 +150,14 @@ function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackRe
     `$wmp.URL = '${escaped}';`,
     `Start-Sleep -Milliseconds 200;`,
     `$wmp.controls.play();`,
-    `Start-Sleep -Seconds 4;`,
+    `Start-Sleep -Seconds 5;`,
   ].join(' ');
 
   return runCommand(
     'powershell.exe',
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
     mode,
-    6000,
+    7000,
   )
     ? { started: true, backend: 'powershell' }
     : NO_PLAYBACK;

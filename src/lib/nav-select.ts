@@ -9,7 +9,7 @@ import {
   isUpKey,
 } from '@inquirer/core';
 import chalk from 'chalk';
-import { clearScreen } from './ui.js';
+import { clearScreen, exitClean } from './ui.js';
 
 const P = chalk.hex('#9B59B6');
 const W = chalk.white;
@@ -44,7 +44,9 @@ const _selectPrompt = createPrompt<unknown, FrameConfig & { choices: NavChoice<a
     const pageSize = config.pageSize ?? 10;
 
     useKeypress((key) => {
-      if (isEnterKey(key) || key.name === 'right') {
+      if (key.name === 'c' && key.ctrl) {
+        exitClean(0);
+      } else if (isEnterKey(key) || key.name === 'right') {
         done(choices[active].value);
       } else if (isUpKey(key)) {
         setActive(Math.max(0, active - 1));
@@ -83,7 +85,9 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
   }, []);
 
   useKeypress(async (key, rl) => {
-    if (key.name === 'left') {
+    if (key.name === 'c' && key.ctrl) {
+      exitClean(0);
+    } else if (key.name === 'left') {
       done(NAV_BACK_INPUT);
       return;
     }

@@ -2,6 +2,7 @@
 import { createRequire } from 'module';
 import { Command } from 'commander';
 import { runDashboard } from './commands/dashboard.js';
+import { exitClean } from './lib/ui.js';
 import { runInit } from './commands/init.js';
 import { runUpload } from './commands/upload.js';
 import { runUse } from './commands/use.js';
@@ -57,22 +58,10 @@ program
 
 // Default: interactive dashboard
 if (process.argv.length === 2) {
-  const cleanup = () => {
-    try {
-      if (process.stdin.isTTY) process.stdin.setRawMode(false);
-    } catch {}
-    process.stdout.write('\x1B[?25h'); // restore cursor visibility
-  };
-
-  process.on('SIGINT', () => {
-    cleanup();
-    process.stdout.write('\n');
-    process.exit(0);
-  });
-
+  process.on('SIGINT', () => exitClean(0));
   runDashboard()
-    .then(() => { cleanup(); process.exit(0); })
-    .catch(() => { cleanup(); process.exit(0); });
+    .then(() => exitClean(0))
+    .catch(() => exitClean(1));
 } else {
   program.parseAsync().catch(() => process.exit(1));
 }

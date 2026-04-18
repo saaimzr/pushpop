@@ -16,6 +16,14 @@ export function clearScreen(): void {
   process.stdout.write('\x1B[2J\x1B[0;0H');
 }
 
+export function exitClean(code = 0): never {
+  try {
+    if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  } catch {}
+  process.stdout.write('\x1B[?25h\n');
+  process.exit(code);
+}
+
 export function banner(version: string): string {
   const title = figlet.textSync('pushpop', { font: 'Small', horizontalLayout: 'default' });
   const mascot = [
