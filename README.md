@@ -10,7 +10,7 @@ Like a producer's tag, but for your terminal.
 
 A way for your team to know who pushed the latest garbage. 
 
-Play a custom audio tag every time you git commit or push. Choose from built-in sound packs or upload your own. For developers who want to add more personality in their workflow. Takes about 60 seconds to set up.
+Play a custom audio tag every time you git add, commit or push. Choose from built-in sound packs or upload your own. For developers who want to add more personality in their workflow. Takes about 60 seconds to set up.
 
 ---
 
