@@ -81,7 +81,7 @@ function getFrameViewport(frame: string | undefined, reservedRows: number, reque
 
 function getDefaultHelpText(kind: 'select' | 'input'): string {
   if (kind === 'input') {
-    return 'Left back  Type to edit  Enter submit';
+    return 'Esc back  Type to edit  Enter submit';
   }
 
   return 'Left back  Up/Down navigate  Right or Enter select';
@@ -185,7 +185,7 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
     } else if (key.name === 'pagedown' || (key.name === 'd' && key.ctrl)) {
       setFrameOffset(Math.min(viewport.maxOffset, viewport.offset + scrollStep));
       return;
-    } else if (key.name === 'left') {
+    } else if (key.name === 'escape') {
       done(NAV_BACK_INPUT);
       return;
     }

@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import * as os from 'os';
 import { getConfig, setConfig } from './config.js';
+import { normalizeWrappedInput } from './input.js';
 
 const POLAR_ACTIVATE_URL = 'https://api.polar.sh/v1/customer-portal/license-keys/activate';
 export const POLAR_ORGANIZATION_ID = 'b3ed864a-0edc-4390-b3ed-c191848843e5';
@@ -55,7 +56,7 @@ function getPolarErrorMessage(payload: unknown): string | null {
 }
 
 export async function validateAndActivateLicense(key: string): Promise<void> {
-  const trimmedKey = key.trim();
+  const trimmedKey = normalizeWrappedInput(key);
 
   if (!trimmedKey || trimmedKey.length < 8) {
     throw new Error('Invalid license key format');

@@ -13,6 +13,7 @@ import {
 } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
+import { normalizeWrappedInput } from '../lib/input.js';
 import {
   FEEDBACK_EMAIL,
   FREE_TIER_LIMIT,
@@ -21,7 +22,6 @@ import {
   isPro,
 } from '../lib/license.js';
 import {
-  animatePreview,
   banner,
   clearScreen,
   enterAltScreen,
@@ -40,9 +40,42 @@ import type { SoundRef } from '../lib/config.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../../package.json') as { version: string };
+const BACK_LABEL = `${purple('←')}  Back`;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getBackChoice<T>(value: T): { name: string; value: T } {
+  return { name: BACK_LABEL, value };
+}
+
+function hasNativeFilePicker(): boolean {
+  return process.platform === 'win32' || process.platform === 'darwin';
+}
+
+function getUploadLimitLines(lifetimeUploads: number, leadLine?: string): string[] {
+  const lines: string[] = [];
+
+  if (leadLine) {
+    lines.push(`  ${warnColor(leadLine)}`, '');
+  }
+
+  lines.push(
+    `  ${warnColor(`Custom upload limit reached (${lifetimeUploads}/${FREE_TIER_LIMIT} slots)`)}`,
+    `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('->')} ${dim(POLAR_CHECKOUT_URL)}`,
+    `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+  );
+
+  return lines;
+}
+
+async function waitForReturn(extraLines: string[], message = white('Press Enter to return.')): Promise<void> {
+  await navSelect({
+    frame: getFrame(extraLines),
+    message,
+    choices: [getBackChoice('back' as const)],
+  });
 }
 
 function formatAssignment(ref: SoundRef | undefined): string {
@@ -146,7 +179,7 @@ async function pickFromList(
 ): Promise<'selected' | 'back'> {
   const choices = [
     ...items.map((item) => ({ name: `  ${white(item.label)}`, value: item.ref as SoundRef | null })),
-    { name: `${purple('←')}  Back`, value: null },
+    getBackChoice(null),
   ];
 
   while (true) {
@@ -159,17 +192,14 @@ async function pickFromList(
 
     if (chosen === NAV_BACK || chosen === null) return 'back';
 
-    const chosenItem = items.find((it) => it.ref === chosen);
     const filePath = resolveSoundPath(chosen);
     let previewLine = `  ${dim('(audio file not found)')}`;
 
     if (filePath) {
-      const playback = playSound(chosen, { mode: 'background' });
+      clearScreen();
+      console.log(getFrame([`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`]));
+      const playback = await playSound(chosen, { mode: 'preview' });
       if (playback.started) {
-        clearScreen();
-        console.log(getFrame([`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`]));
-        const durationMs = ((chosenItem?.durationSec ?? 3) + 0.5) * 1000;
-        await animatePreview(durationMs);
         previewLine = `  ${purple('♪')}  ${white(`Played: ${chosen.name}`)}`;
       } else {
         previewLine = `  ${warnColor('Preview unavailable on this system')}`;
@@ -200,12 +230,7 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
   const customSounds = getCustomSounds();
 
   while (true) {
-    const genreChoices: { name: string; value: string }[] = [
-      {
-        name: `${purple('⊘')}  ${white('No sound (remove assignment)')}`,
-        value: '__remove__',
-      },
-    ];
+    const genreChoices: { name: string; value: string }[] = [];
 
     if (customSounds.length > 0) {
       genreChoices.push({ name: `${purple('♫')}  My uploads (${customSounds.length})`, value: '__custom__' });
@@ -219,7 +244,11 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
       });
     }
 
-    genreChoices.push({ name: `${purple('←')}  Back`, value: '__back__' });
+    genreChoices.push({
+      name: `${purple('⊘')}  ${white('No sound (remove assignment)')}`,
+      value: '__remove__',
+    });
+    genreChoices.push(getBackChoice('__back__'));
 
     const genreId = await navSelect({
       frame: getFrame(),
@@ -271,7 +300,7 @@ async function setVolumeLevel(): Promise<void> {
     name: `${purple(value === current ? '●' : '○')}  ${white(`${value}%`)}`,
     value,
   }));
-  choices.push({ name: `${purple('←')}  Back`, value: 'back' });
+  choices.push(getBackChoice('back'));
 
   const choice = await navSelect<number | 'back'>({
     frame: getFrame(),
@@ -291,12 +320,7 @@ async function addCustomSound(): Promise<void> {
     const lifetimeUploads = getLifetimeCustomUploads();
 
     if (!isPro() && lifetimeUploads >= FREE_TIER_LIMIT) {
-      printHeader([
-        `  ${warnColor(`Custom upload limit reached (${lifetimeUploads}/${FREE_TIER_LIMIT} slots)`)}`,
-        `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('->')} ${dim(POLAR_CHECKOUT_URL)}`,
-        `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
-      ]);
-      await sleep(2500);
+      await waitForReturn(getUploadLimitLines(lifetimeUploads));
       return;
     }
 
@@ -306,9 +330,11 @@ async function addCustomSound(): Promise<void> {
       frame: getFrame(getAddCustomLines()),
       message: white('How do you want to add a sound?'),
       choices: [
-        { name: `${purple('📁')}  Browse files (open file picker)`, value: 'browse' },
+        ...(hasNativeFilePicker()
+          ? [{ name: `${purple('📁')}  Browse files (open file picker)`, value: 'browse' as const }]
+          : []),
         { name: `${purple('⌨')}  Enter file path manually`, value: 'manual' },
-        { name: `${purple('←')}  Back`, value: 'back' },
+        getBackChoice('back'),
       ],
     });
 
@@ -330,17 +356,27 @@ async function addCustomSound(): Promise<void> {
       const result = await navInput({
         frame: getFrame(getAddCustomLines()),
         message: white('Path to your audio file (.mp3 / .wav / .m4a):'),
-        validate: (value) => value.trim().length > 0 || 'Please enter a file path',
+        validate: (value) => normalizeWrappedInput(value).length > 0 || 'Please enter a file path',
       });
       if (result === NAV_BACK) return;
-      filePath = result.trim();
+      filePath = normalizeWrappedInput(result);
     }
 
     if (!filePath) continue;
 
     const success = await runUpload(filePath, {});
     if (success) {
-      await sleep(1200);
+      if (!isPro()) {
+        const updatedLifetimeUploads = getLifetimeCustomUploads();
+        if (updatedLifetimeUploads >= FREE_TIER_LIMIT) {
+          await waitForReturn(
+            getUploadLimitLines(
+              updatedLifetimeUploads,
+              `All ${FREE_TIER_LIMIT} custom slots used. Next upload requires pro unlock.`,
+            ),
+          );
+        }
+      }
       return;
     }
 
@@ -362,26 +398,19 @@ async function manageCustomSounds(): Promise<void> {
     const customSounds = getCustomSounds();
 
     if (customSounds.length === 0) {
-      await navSelect({
-        frame: getFrame([
-          `  ${dim('No custom sounds saved yet.')}`,
-          `  ${dim('Delete actions never restore free upload slots.')}`,
-        ]),
-        message: white('Press Enter to return.'),
-        choices: [{ name: `${purple('ƒ+?')}  Back`, value: 'back' as const }],
-      });
+      await waitForReturn([`  ${dim('No custom sounds saved yet.')}`]);
       return;
     }
 
     const choice = await navSelect<string | '__back__'>({
-      frame: getFrame([`  ${dim('Deleting a sound removes the file but does not restore free upload slots.')}`]),
+      frame: getFrame(),
       message: white('Choose a custom sound to delete:'),
       choices: [
         ...customSounds.map((sound) => ({
           name: `  ${white(sound.name)}`,
           value: sound.file,
         })),
-        { name: `${purple('ƒ+?')}  Back`, value: '__back__' },
+        getBackChoice('__back__'),
       ],
       pageSize: 10,
     });
@@ -395,7 +424,6 @@ async function manageCustomSounds(): Promise<void> {
       frame: getFrame([
         `  ${warnColor(`Delete "${sound.name}"?`)}`,
         `  ${dim('This removes the file and clears any commit/push assignment using it.')}`,
-        `  ${dim('Free upload slots are lifetime-based and will not be restored.')}`,
       ]),
       message: white('Confirm deletion:'),
       choices: [
@@ -423,19 +451,15 @@ async function manageCustomSounds(): Promise<void> {
 }
 
 async function showHelpInfo(): Promise<void> {
-  await navSelect({
-    frame: getFrame([
-      `  ${white('pushpop plays short audio tags when you git commit and git push.')}`,
-      '',
-      `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
-      `  ${dim('After that, every repo on this machine works without per-project setup.')}`,
-      '',
-      `  ${white('Upgrade to Pro:')} ${dim(POLAR_CHECKOUT_URL)}`,
-      `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
-    ]),
-    message: white('Press Enter to return.'),
-    choices: [{ name: `${purple('ƒ+?')}  Back`, value: 'back' as const }],
-  });
+  await waitForReturn([
+    `  ${white('pushpop plays short audio tags when you git commit and git push.')}`,
+    '',
+    `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
+    `  ${dim('After that, every repo on this machine works without per-project setup.')}`,
+    '',
+    `  ${white('Upgrade to Pro:')} ${dim(POLAR_CHECKOUT_URL)}`,
+    `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+  ]);
 }
 
 async function shareFeedback(): Promise<void> {
@@ -450,7 +474,7 @@ async function shareFeedback(): Promise<void> {
   await navSelect({
     frame: getFrame(bodyLines),
     message: white('Press Enter to return.'),
-    choices: [{ name: `${purple('←')}  Back`, value: 'back' as const }],
+    choices: [getBackChoice('back' as const)],
   });
 }
 
@@ -459,13 +483,13 @@ async function activateLicense(): Promise<void> {
     const result = await navInput({
       frame: getFrame(),
       message: white('Enter your Polar license key:'),
-      validate: (value) => value.trim().length >= 8 || 'Key too short',
+      validate: (value) => normalizeWrappedInput(value).length > 0 || 'Please enter a license key',
     });
 
     if (result === NAV_BACK) return;
 
     try {
-      await runActivate(result.trim(), { exitOnError: false });
+      await runActivate(normalizeWrappedInput(result), { exitOnError: false });
       await sleep(1500);
       return;
     } catch {

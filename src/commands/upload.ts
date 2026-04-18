@@ -8,6 +8,7 @@ import {
   getLifetimeCustomUploads,
   incrementLifetimeCustomUploads,
 } from '../lib/config.js';
+import { normalizeWrappedInput } from '../lib/input.js';
 import { playFilePath, isFfmpegAvailable, truncateAudio } from '../lib/audio.js';
 import { navSelect, NAV_BACK } from '../lib/nav-select.js';
 import { getAudioInfo, MAX_DURATION_SEC } from '../lib/validate.js';
@@ -99,7 +100,10 @@ async function confirmUpload(
     }
 
     if (action === 'preview') {
-      const playback = playFilePath(preparedUpload.preparedPath, { mode: 'preview' });
+      const playback = await playFilePath(preparedUpload.preparedPath, {
+        mode: 'preview',
+        durationSec: preparedUpload.finalDurationSec,
+      });
       feedbackLine = playback.started
         ? `  ${purple('♫')}  ${white('Preview played.')}`
         : `  ${warnColor('Preview unavailable on this system')}`;
@@ -111,7 +115,7 @@ async function confirmUpload(
 }
 
 export async function runUpload(filePath: string, opts: { name?: string }): Promise<boolean> {
-  const normalized = filePath.replace(/^["']+|["']+$/g, '').trim();
+  const normalized = normalizeWrappedInput(filePath);
 
   if (!fs.existsSync(normalized)) {
     fail(`File not found: ${normalized}`);
