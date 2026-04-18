@@ -5,7 +5,7 @@ import ora from 'ora';
 import { CUSTOM_DIR, getCustomUploadCount, ensureDirs } from '../lib/config.js';
 import { getAudioInfo, MAX_DURATION_SEC } from '../lib/validate.js';
 import { isFfmpegAvailable, truncateAudio } from '../lib/audio.js';
-import { FREE_TIER_LIMIT, hasUnlimitedUploads, isDevUploadLimitBypassed, isPro } from '../lib/license.js';
+import { FREE_TIER_LIMIT, isPro } from '../lib/license.js';
 import { ok, warn, fail, showPaywall } from '../lib/ui.js';
 
 // Returns true on success, false on any failure (never calls process.exit; caller decides)
@@ -21,9 +21,8 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
 
   const uploadCount = getCustomUploadCount();
   const pro = isPro();
-  const unlimitedUploads = hasUnlimitedUploads();
 
-  if (!unlimitedUploads && uploadCount >= FREE_TIER_LIMIT) {
+  if (!pro && uploadCount >= FREE_TIER_LIMIT) {
     showPaywall('box');
     return false;
   }
@@ -80,7 +79,7 @@ export async function runUpload(filePath: string, opts: { name?: string }): Prom
   ok(`Saved as "${tagName}" → ${destPath}`);
 
   const newCount = getCustomUploadCount();
-  if (!pro && !isDevUploadLimitBypassed()) {
+  if (!pro) {
     const remaining = FREE_TIER_LIMIT - newCount;
     if (remaining > 0) {
       console.log(`\n  Custom uploads: ${newCount}/${FREE_TIER_LIMIT} slots used (${remaining} remaining)`);

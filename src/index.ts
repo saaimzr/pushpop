@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Load .env as the very first thing so every downstream module sees the values.
+import './lib/env.js';
 import { createRequire } from 'module';
 import { Command } from 'commander';
 import { runDashboard } from './commands/dashboard.js';

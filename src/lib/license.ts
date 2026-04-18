@@ -3,11 +3,10 @@ import { getConfig, setConfig } from './config.js';
 
 const LS_ACTIVATE_URL = 'https://api.lemonsqueezy.com/v1/licenses/activate';
 export const LEMONSQUEEZY_URL = 'https://pushpop.lemonsqueezy.com/buy/YOUR_PRODUCT_ID'; // set before publishing
-export const FEEDBACK_URL = 'https://forms.gle/YOUR_FEEDBACK_FORM_ID'; // set before publishing
+export const FEEDBACK_EMAIL = 'saaim.raad3@gmail.com';
 export const PRICE = '$1.29 USD';
 
 export const FREE_TIER_LIMIT = 2; // custom uploads only; built-ins are unlimited
-const DEV_UPLOAD_BYPASS_ENV = 'PUSHPOP_DEV_BYPASS_UPLOAD_LIMIT';
 
 interface LemonSqueezyResponse {
   activated: boolean;
@@ -62,23 +61,16 @@ export async function validateAndActivateLicense(key: string): Promise<void> {
     throw new Error(data.error ?? 'License key is invalid or has already reached its activation limit.');
   }
 
+  const nowIso = new Date().toISOString();
   setConfig({
     pro: true,
     licenseKey: trimmedKey,
     licenseInstanceId: data.instance?.id,
-    activatedAt: new Date().toISOString(),
+    activatedAt: nowIso,
+    lastValidatedAt: nowIso,
   });
 }
 
 export function isPro(): boolean {
   return getConfig().pro === true;
-}
-
-// DEV ONLY: remove before release.
-export function isDevUploadLimitBypassed(): boolean {
-  return process.env[DEV_UPLOAD_BYPASS_ENV] === '1';
-}
-
-export function hasUnlimitedUploads(): boolean {
-  return isPro() || isDevUploadLimitBypassed();
 }

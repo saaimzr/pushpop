@@ -1,4 +1,20 @@
 node_modules/
 dist/
 *.js.map
+
+# Env files — never commit real secrets. `.env.example` is the template and is committed.
 .env
+.env.local
+.env.*.local
+
+# Logs and local tarballs
+*.log
+*.tgz
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

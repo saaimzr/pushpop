@@ -2,10 +2,18 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync, spawn, spawnSync } from 'child_process';
-import { SoundRef } from './config.js';
+import { SoundRef, getVolume, DEFAULT_VOLUME } from './config.js';
 import { resolveBuiltinPath, resolveCustomPath } from './sounds.js';
 
-export type PlaybackBackend = 'afplay' | 'mshta-wmp' | 'ffplay' | 'powershell' | 'none';
+export type PlaybackBackend =
+  | 'afplay'
+  | 'mshta-wmp'
+  | 'ffplay'
+  | 'powershell'
+  | 'paplay'
+  | 'aplay'
+  | 'mpg123'
+  | 'none';
 export type PlaybackMode = 'background' | 'preview';
 export interface PlaybackResult {
   started: boolean;
@@ -29,6 +37,14 @@ export function resolveSoundPath(ref: SoundRef): string | null {
     return fullPath;
   } catch {
     return null;
+  }
+}
+
+function currentVolume(): number {
+  try {
+    return getVolume();
+  } catch {
+    return DEFAULT_VOLUME;
   }
 }
 
@@ -97,18 +113,20 @@ function isCommandAvailable(command: string, probeArgs: string[] = ['-version'])
 }
 
 function playMacOS(filePath: string, mode: PlaybackMode): PlaybackResult {
-  return runCommand('afplay', [filePath], mode, 7000)
+  // afplay -v takes 0.0–1.0. Map 0–100 linearly; cap at 1.0.
+  const afVol = Math.max(0, Math.min(1, currentVolume() / 100)).toFixed(3);
+  return runCommand('afplay', ['-v', afVol, filePath], mode, 7000)
     ? { started: true, backend: 'afplay' }
     : NO_PLAYBACK;
 }
 
-function buildVbsScript(filePath: string): string {
+function buildVbsScript(filePath: string, volume: number): string {
   const escaped = filePath.replace(/"/g, '""');
   return [
     'Dim oPlayer',
     'Set oPlayer = CreateObject("WMPlayer.OCX.7")',
     'oPlayer.settings.autoStart = False',
-    'oPlayer.settings.volume = 100',
+    `oPlayer.settings.volume = ${volume}`,
     `oPlayer.URL = "${escaped}"`,
     'oPlayer.controls.play()',
     'WScript.Sleep 5000',
@@ -121,7 +139,7 @@ function buildVbsScript(filePath: string): string {
 function playWindowsWscript(filePath: string, mode: PlaybackMode): PlaybackResult {
   const tmpFile = path.join(os.tmpdir(), `pushpop-${Date.now()}.vbs`);
   try {
-    fs.writeFileSync(tmpFile, buildVbsScript(filePath), 'utf8');
+    fs.writeFileSync(tmpFile, buildVbsScript(filePath, currentVolume()), 'utf8');
   } catch {
     return NO_PLAYBACK;
   }
@@ -136,17 +154,24 @@ function playWindowsFfplay(filePath: string, mode: PlaybackMode): PlaybackResult
     return NO_PLAYBACK;
   }
 
-  return runCommand('ffplay.exe', ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath], mode, 7000)
+  const vol = String(currentVolume());
+  return runCommand(
+    'ffplay.exe',
+    ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-volume', vol, filePath],
+    mode,
+    7000,
+  )
     ? { started: true, backend: 'ffplay' }
     : NO_PLAYBACK;
 }
 
 function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackResult {
   const escaped = filePath.replace(/'/g, "''");
+  const vol = currentVolume();
   const script = [
     `$wmp = New-Object -ComObject WMPlayer.OCX.7;`,
     `$wmp.settings.autoStart = $false;`,
-    `$wmp.settings.volume = 100;`,
+    `$wmp.settings.volume = ${vol};`,
     `$wmp.URL = '${escaped}';`,
     `Start-Sleep -Milliseconds 200;`,
     `$wmp.controls.play();`,
@@ -165,8 +190,9 @@ function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackRe
 
 function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
   // wscript + Windows Media Player COM is present on every modern Windows install;
-  // ffplay is only available if the user installed ffmpeg separately. Try the
-  // universal option first, regardless of mode.
+  // ffplay is only available if the user installed ffmpeg separately.
+  // PowerShell COM is a last-resort fallback for environments where both above
+  // fail (e.g. Windows Defender quarantining the transient .vbs script).
   const backends = [
     () => playWindowsWscript(filePath, mode),
     () => playWindowsFfplay(filePath, mode),
@@ -176,6 +202,69 @@ function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
   for (const attempt of backends) {
     const result = attempt();
     debugAudio(`windows mode=${mode} backend=${result.backend} started=${String(result.started)}`);
+    if (result.started) {
+      return result;
+    }
+  }
+
+  return NO_PLAYBACK;
+}
+
+// --- Linux ---
+
+function playLinuxPaplay(filePath: string, mode: PlaybackMode): PlaybackResult {
+  if (!isCommandAvailable('paplay', ['--version'])) return NO_PLAYBACK;
+  // paplay --volume expects 0–65536 (0x10000 = 100%). Remap linearly.
+  const paVol = String(Math.max(0, Math.min(65536, Math.round(currentVolume() * 655.36))));
+  return runCommand('paplay', [`--volume=${paVol}`, filePath], mode, 7000)
+    ? { started: true, backend: 'paplay' }
+    : NO_PLAYBACK;
+}
+
+function playLinuxFfplay(filePath: string, mode: PlaybackMode): PlaybackResult {
+  if (!isCommandAvailable('ffplay', ['-version'])) return NO_PLAYBACK;
+  const vol = String(currentVolume());
+  return runCommand(
+    'ffplay',
+    ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-volume', vol, filePath],
+    mode,
+    7000,
+  )
+    ? { started: true, backend: 'ffplay' }
+    : NO_PLAYBACK;
+}
+
+function playLinuxAplay(filePath: string, mode: PlaybackMode): PlaybackResult {
+  if (!isCommandAvailable('aplay', ['--version'])) return NO_PLAYBACK;
+  // aplay has no clean volume flag. Plays at source volume. Documented caveat.
+  // aplay handles WAV natively; for mp3/m4a it will fail — we rely on earlier
+  // backends to pick those up. This entry still exists as a safety net for
+  // WAV-only ALSA-only boxes.
+  return runCommand('aplay', ['-q', filePath], mode, 7000)
+    ? { started: true, backend: 'aplay' }
+    : NO_PLAYBACK;
+}
+
+function playLinuxMpg123(filePath: string, mode: PlaybackMode): PlaybackResult {
+  if (!isCommandAvailable('mpg123', ['--version'])) return NO_PLAYBACK;
+  // mpg123 -f takes scaling 0–32768 (0x8000 = 100%, the default). Remap.
+  const scale = String(Math.max(0, Math.min(32768, Math.round(currentVolume() * 327.68))));
+  return runCommand('mpg123', ['-q', '-f', scale, filePath], mode, 7000)
+    ? { started: true, backend: 'mpg123' }
+    : NO_PLAYBACK;
+}
+
+function playLinux(filePath: string, mode: PlaybackMode): PlaybackResult {
+  const backends = [
+    () => playLinuxPaplay(filePath, mode),
+    () => playLinuxFfplay(filePath, mode),
+    () => playLinuxAplay(filePath, mode),
+    () => playLinuxMpg123(filePath, mode),
+  ];
+
+  for (const attempt of backends) {
+    const result = attempt();
+    debugAudio(`linux mode=${mode} backend=${result.backend} started=${String(result.started)}`);
     if (result.started) {
       return result;
     }
@@ -200,6 +289,10 @@ export function playFilePath(filePath: string, options: PlaybackOptions = {}): P
 
   if (platform === 'win32') {
     return playWindows(filePath, mode);
+  }
+
+  if (platform === 'linux') {
+    return playLinux(filePath, mode);
   }
 
   return NO_PLAYBACK;

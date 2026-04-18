@@ -19,14 +19,19 @@ export interface PushpopConfig {
   licenseKey?: string;
   licenseInstanceId?: string;
   activatedAt?: string;
+  lastValidatedAt?: string;
   assignments: Assignments;
+  volume?: number; // 0–100, default 70
 }
+
+export const DEFAULT_VOLUME = 70;
 
 const conf = new Conf<PushpopConfig>({
   projectName: 'pushpop',
   defaults: {
     pro: false,
     assignments: {},
+    volume: DEFAULT_VOLUME,
   },
 });
 
@@ -35,13 +40,22 @@ export const CUSTOM_DIR = path.join(PUSHPOP_DIR, 'custom');
 export const HOOKS_DIR = path.join(PUSHPOP_DIR, 'hooks');
 
 export function getConfig(): PushpopConfig {
+  const storedVolume = conf.get('volume');
   return {
     pro: conf.get('pro'),
     licenseKey: conf.get('licenseKey'),
     licenseInstanceId: conf.get('licenseInstanceId'),
     activatedAt: conf.get('activatedAt'),
+    lastValidatedAt: conf.get('lastValidatedAt'),
     assignments: conf.get('assignments') ?? {},
+    volume: typeof storedVolume === 'number' ? storedVolume : DEFAULT_VOLUME,
   };
+}
+
+export function getVolume(): number {
+  const v = conf.get('volume');
+  if (typeof v !== 'number' || Number.isNaN(v)) return DEFAULT_VOLUME;
+  return Math.max(0, Math.min(100, Math.round(v)));
 }
 
 export function setConfig(updates: Partial<PushpopConfig>): void {

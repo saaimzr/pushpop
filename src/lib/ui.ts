@@ -41,6 +41,15 @@ function restoreTerminal(): void {
   process.stdout.write('\x1B[?25h\x1B[?1049l');
 }
 
+/**
+ * Leave the alternate screen buffer without exiting the process. Use this
+ * when the caller wants further output (e.g. an uninstall goodbye message)
+ * to remain in the user's scrollback after pushpop exits.
+ */
+export function exitAltScreen(): void {
+  restoreTerminal();
+}
+
 function handleSignal(): void {
   restoreTerminal();
   process.exit(130);

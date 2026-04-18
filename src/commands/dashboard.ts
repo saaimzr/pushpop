@@ -2,16 +2,14 @@ import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { getConfig, setConfig, getCustomUploadCount, HOOKS_DIR } from '../lib/config.js';
+import { getConfig, setConfig, getCustomUploadCount, getVolume, HOOKS_DIR, DEFAULT_VOLUME } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
 import {
-  FEEDBACK_URL,
+  FEEDBACK_EMAIL,
   FREE_TIER_LIMIT,
   LEMONSQUEEZY_URL,
   PRICE,
-  hasUnlimitedUploads,
-  isDevUploadLimitBypassed,
   isPro,
 } from '../lib/license.js';
 import {
@@ -19,12 +17,12 @@ import {
   banner,
   clearScreen,
   enterAltScreen,
-  openUrl,
   statusPanel,
   ok,
   purple,
   white,
   dim,
+  warn as warnUi,
 } from '../lib/ui.js';
 import { navSelect, navInput, NAV_BACK } from '../lib/nav-select.js';
 import { runUpload } from './upload.js';
@@ -39,24 +37,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function formatAssignment(ref: SoundRef | undefined): string {
+  if (!ref) return '(none set)';
+  const resolved = resolveSoundPath(ref);
+  if (!resolved) return `♪  ${ref.name}  ${'(file missing)'}`;
+  return `♪  ${ref.name}`;
+}
+
 function getStatusLines(): { label: string; value: string }[] {
   const { assignments } = getConfig();
   const uploadCount = getCustomUploadCount();
+  const volume = getVolume();
 
   const lines: { label: string; value: string }[] = [
-    {
-      label: 'commit',
-      value: assignments.commit ? `♪  ${assignments.commit.name}` : '(none set)',
-    },
-    {
-      label: 'push',
-      value: assignments.push ? `♪  ${assignments.push.name}` : '(none set)',
-    },
+    { label: 'commit', value: formatAssignment(assignments.commit) },
+    { label: 'push', value: formatAssignment(assignments.push) },
+    { label: 'volume', value: `${volume}%` },
   ];
 
-  if (isDevUploadLimitBypassed()) {
-    lines.push({ label: 'uploads', value: 'dev bypass active' });
-  } else if (!isPro()) {
+  if (!isPro()) {
     lines.push({
       label: 'uploads',
       value: `${uploadCount}/${FREE_TIER_LIMIT} custom slots used`,
@@ -93,10 +92,6 @@ function printHeader(extraLines: string[] = []): void {
 }
 
 function getAddCustomLines(): string[] {
-  if (isDevUploadLimitBypassed()) {
-    return [`  ${purple('◆')}  ${white('Dev mode — upload cap bypass active')}`];
-  }
-
   if (isPro()) {
     return [`  ${purple('◆')}  ${white('Pro — unlimited custom uploads')}`];
   }
@@ -201,6 +196,16 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
   while (true) {
     const genreChoices: { name: string; value: string }[] = [];
 
+    // Allow clearing the current assignment. Only shown if one is actually set,
+    // so the list stays clean for first-time users.
+    const currentlySet = getConfig().assignments[event];
+    if (currentlySet) {
+      genreChoices.push({
+        name: `${purple('⊘')}  ${white('No sound (remove assignment)')}`,
+        value: '__remove__',
+      });
+    }
+
     if (customSounds.length > 0) {
       genreChoices.push({ name: `${purple('◎')}  My uploads (${customSounds.length})`, value: '__custom__' });
     }
@@ -223,6 +228,16 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
     });
 
     if (genreId === NAV_BACK || genreId === '__back__') return;
+
+    if (genreId === '__remove__') {
+      const { assignments } = getConfig();
+      const next = { ...assignments };
+      delete next[event];
+      setConfig({ assignments: next });
+      ok(`Removed ${event} sound`);
+      await sleep(900);
+      return;
+    }
 
     let soundItems: { ref: SoundRef; label: string }[];
 
@@ -255,7 +270,7 @@ async function addCustomSound(): Promise<void> {
   while (true) {
     const uploadCount = getCustomUploadCount();
 
-    if (!hasUnlimitedUploads() && uploadCount >= FREE_TIER_LIMIT) {
+    if (!isPro() && uploadCount >= FREE_TIER_LIMIT) {
       const urlReady = !LEMONSQUEEZY_URL.includes('YOUR_PRODUCT_ID');
       const paywallLines = urlReady
         ? [
@@ -330,28 +345,22 @@ async function addCustomSound(): Promise<void> {
 }
 
 async function shareFeedback(): Promise<void> {
-  const urlReady = !FEEDBACK_URL.includes('YOUR_FEEDBACK_FORM_ID');
-  const bodyLines: string[] = [];
+  // Plain email display — no browser launch, no form URL. Users can copy the
+  // address from their terminal. Wait for any key so the user controls when
+  // to return to the dashboard.
+  const bodyLines = [
+    `  ${purple('♡')}  ${white('Share feedback')}`,
+    '',
+    `        ${purple(FEEDBACK_EMAIL)}`,
+    '',
+    `  ${dim('Bug reports, feature requests, producer-tag suggestions — all welcome.')}`,
+  ];
 
-  if (urlReady) {
-    const opened = openUrl(FEEDBACK_URL);
-    bodyLines.push(`  ${purple('♡')}  ${white('Thanks for helping shape pushpop!')}`);
-    bodyLines.push('');
-    if (opened) {
-      bodyLines.push(`  ${dim('Your browser should open the feedback form.')}`);
-    } else {
-      bodyLines.push(`  ${dim('Could not launch your browser. Open this link:')}`);
-    }
-    bodyLines.push(`  ${purple(FEEDBACK_URL)}`);
-  } else {
-    bodyLines.push(`  ${purple('♡')}  ${white('Thanks for trying pushpop!')}`);
-    bodyLines.push('');
-    bodyLines.push(`  ${dim('Feedback form is coming in the next release.')}`);
-    bodyLines.push(`  ${dim('For now, email:')} ${purple('saaim.raad3@gmail.com')}`);
-  }
-
-  printHeader(bodyLines);
-  await sleep(3500);
+  await navSelect({
+    frame: getFrame(bodyLines),
+    message: white('Press Enter to return.'),
+    choices: [{ name: `${purple('←')}  Back`, value: 'back' as const }],
+  });
 }
 
 async function activateLicense(): Promise<void> {
