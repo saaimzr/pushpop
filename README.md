@@ -8,9 +8,9 @@ Like a producer's tag, but for your terminal.
 
 ## What is this?
 
-A way for your team to know who pushed the latest garbage. 
+A way for your team to know who pushed the latest garbage.
 
-Play a custom audio tag every time you git add, commit or push. Choose from built-in sound packs or upload your own. For developers who want to add more personality in their workflow. Takes about 60 seconds to set up.
+Play a custom audio tag every time you `git commit` or `git push`. Choose from built-in sound packs or upload your own. For developers who want to add more personality in their workflow. Takes about 60 seconds to set up.
 
 ---
 
@@ -20,7 +20,7 @@ Play a custom audio tag every time you git add, commit or push. Choose from buil
 npm install -g pushpopper
 ```
 
-> Requires Node.js 18 or higher. Works on macOS and Windows.
+> Requires Node.js 18 or higher. Audio playback is supported on **macOS** and **Windows** only — Linux is not supported in this release.
 
 ---
 

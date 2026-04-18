@@ -34,45 +34,80 @@ if [ -n "$GIT_DIR" ]; then
 fi
 `;
 
-// Requires git 2.29+. $1=1 means the working tree was also updated (checkout/merge),
-// so $1 != 1 means this is a pure staging operation (git add / git rm / git reset HEAD).
-const POST_INDEX_CHANGE_HOOK = `#!/bin/sh
-# pushpop: play add sound on git add (git 2.29+ only)
-# $1=1 means a checkout also updated the working tree — skip those.
-if [ "\${1}" != "1" ] && [ "\${npm_command}" != "version" ]; then
-  pushpop play --event add 2>/dev/null || true
-fi
-`;
-
 export function installHooks(): void {
   const postCommitPath = path.join(HOOKS_DIR, 'post-commit');
   const prePushPath = path.join(HOOKS_DIR, 'pre-push');
-  const postIndexChangePath = path.join(HOOKS_DIR, 'post-index-change');
 
   fs.writeFileSync(postCommitPath, POST_COMMIT_HOOK, { mode: 0o755 });
   fs.writeFileSync(prePushPath, PRE_PUSH_HOOK, { mode: 0o755 });
-  fs.writeFileSync(postIndexChangePath, POST_INDEX_CHANGE_HOOK, { mode: 0o755 });
+
+  // Clean up legacy post-index-change hook from older pushpop versions.
+  // It fired on both `git add` and `git commit`, which caused the add sound
+  // to replay during commits. The feature has been dropped.
+  const legacyPostIndexChange = path.join(HOOKS_DIR, 'post-index-change');
+  if (fs.existsSync(legacyPostIndexChange)) {
+    try {
+      fs.rmSync(legacyPostIndexChange);
+    } catch {
+      // best-effort cleanup
+    }
+  }
 }
 
 export function setGlobalHooksPath(): void {
+  // Preserve whatever the user had set previously so `uninstall` can restore it.
+  try {
+    const prior = execSync('git config --global --get core.hooksPath', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+    const ourPath = HOOKS_DIR.replace(/\\/g, '/');
+    if (prior && prior !== ourPath) {
+      execSync(`git config --global pushpop.previousHooksPath "${prior}"`, { stdio: 'pipe' });
+    }
+  } catch {
+    // no prior value, that's fine
+  }
+
   execSync(`git config --global core.hooksPath "${HOOKS_DIR.replace(/\\/g, '/')}"`, {
     stdio: 'pipe',
   });
 }
 
 export function unsetGlobalHooksPath(): void {
+  let prior = '';
   try {
-    execSync('git config --global --unset core.hooksPath', { stdio: 'pipe' });
+    prior = execSync('git config --global --get pushpop.previousHooksPath', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    // no backup, that's fine
+  }
+
+  try {
+    if (prior) {
+      execSync(`git config --global core.hooksPath "${prior}"`, { stdio: 'pipe' });
+    } else {
+      execSync('git config --global --unset core.hooksPath', { stdio: 'pipe' });
+    }
   } catch {
     // already unset, that's fine
+  }
+
+  try {
+    execSync('git config --global --unset pushpop.previousHooksPath', { stdio: 'pipe' });
+  } catch {
+    // nothing to clear
   }
 }
 
 export function removeHooks(): void {
   const postCommitPath = path.join(HOOKS_DIR, 'post-commit');
   const prePushPath = path.join(HOOKS_DIR, 'pre-push');
-  const postIndexChangePath = path.join(HOOKS_DIR, 'post-index-change');
-  [postCommitPath, prePushPath, postIndexChangePath].forEach((p) => {
+  const legacyPostIndexChange = path.join(HOOKS_DIR, 'post-index-change');
+  [postCommitPath, prePushPath, legacyPostIndexChange].forEach((p) => {
     if (fs.existsSync(p)) fs.rmSync(p);
   });
 }
+

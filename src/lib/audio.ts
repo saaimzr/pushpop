@@ -164,17 +164,14 @@ function playWindowsPowershell(filePath: string, mode: PlaybackMode): PlaybackRe
 }
 
 function playWindows(filePath: string, mode: PlaybackMode): PlaybackResult {
-  const backends = mode === 'preview'
-    ? [
-        () => playWindowsFfplay(filePath, mode),
-        () => playWindowsWscript(filePath, mode),
-        () => playWindowsPowershell(filePath, mode),
-      ]
-    : [
-        () => playWindowsWscript(filePath, mode),
-        () => playWindowsFfplay(filePath, mode),
-        () => playWindowsPowershell(filePath, mode),
-      ];
+  // wscript + Windows Media Player COM is present on every modern Windows install;
+  // ffplay is only available if the user installed ffmpeg separately. Try the
+  // universal option first, regardless of mode.
+  const backends = [
+    () => playWindowsWscript(filePath, mode),
+    () => playWindowsFfplay(filePath, mode),
+    () => playWindowsPowershell(filePath, mode),
+  ];
 
   for (const attempt of backends) {
     const result = attempt();

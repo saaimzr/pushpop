@@ -11,7 +11,7 @@ import {
   isDevUploadLimitBypassed,
   isPro,
 } from '../lib/license.js';
-import { banner, clearScreen, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
+import { banner, clearScreen, enterAltScreen, statusPanel, ok, purple, white, dim } from '../lib/ui.js';
 import { navSelect, navInput, NAV_BACK } from '../lib/nav-select.js';
 import { runUpload } from './upload.js';
 import { runActivate } from './activate.js';
@@ -30,10 +30,6 @@ function getStatusLines(): { label: string; value: string }[] {
   const uploadCount = getCustomUploadCount();
 
   const lines: { label: string; value: string }[] = [
-    {
-      label: 'add',
-      value: assignments.add ? `♪  ${assignments.add.name}` : '(none set)',
-    },
     {
       label: 'commit',
       value: assignments.commit ? `♪  ${assignments.commit.name}` : '(none set)',
@@ -128,7 +124,7 @@ function openFilePicker(): string | null {
 
 async function pickFromList(
   items: { ref: SoundRef; label: string }[],
-  event: 'add' | 'commit' | 'push'
+  event: 'commit' | 'push'
 ): Promise<'selected' | 'back'> {
   const choices = [
     ...items.map((item) => ({ name: `  ${white(item.label)}`, value: item.ref as SoundRef | null })),
@@ -175,7 +171,7 @@ async function pickFromList(
   }
 }
 
-async function pickSound(event: 'add' | 'commit' | 'push'): Promise<void> {
+async function pickSound(event: 'commit' | 'push'): Promise<void> {
   const genres = getAllGenres();
   const customSounds = getCustomSounds();
 
@@ -236,11 +232,18 @@ async function addCustomSound(): Promise<void> {
     const uploadCount = getCustomUploadCount();
 
     if (!hasUnlimitedUploads() && uploadCount >= FREE_TIER_LIMIT) {
-      printHeader([
-        `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
-        `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('→')} ${dim(LEMONSQUEEZY_URL)}`,
-        `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
-      ]);
+      const urlReady = !LEMONSQUEEZY_URL.includes('YOUR_PRODUCT_ID');
+      const paywallLines = urlReady
+        ? [
+            `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
+            `  ${dim('Unlock unlimited for')} ${purple(PRICE)} ${dim('→')} ${dim(LEMONSQUEEZY_URL)}`,
+            `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+          ]
+        : [
+            `  ${purple('⚠')}  ${white(`Custom upload limit reached (${uploadCount}/${FREE_TIER_LIMIT} slots)`)}`,
+            `  ${dim('Pro upgrade link coming soon — check back shortly.')}`,
+          ];
+      printHeader(paywallLines);
       await sleep(2500);
       return;
     }
@@ -323,14 +326,15 @@ async function activateLicense(): Promise<void> {
 }
 
 export async function runDashboard(): Promise<void> {
-  type MenuChoice = 'add' | 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
+  type MenuChoice = 'commit' | 'push' | 'upload' | 'activate' | 'uninstall' | 'exit';
+
+  enterAltScreen();
 
   while (true) {
     const choice = await navSelect<MenuChoice>({
       frame: getFrame(),
       message: white('What do you want to do?'),
       choices: [
-        { name: `${purple('▸')}  Set add sound`, value: 'add' },
         { name: `${purple('▸')}  Set commit sound`, value: 'commit' },
         { name: `${purple('▸')}  Set push sound`, value: 'push' },
         { name: `${purple('⊕')}  Add custom sound`, value: 'upload' },
@@ -343,7 +347,7 @@ export async function runDashboard(): Promise<void> {
 
     if (choice === NAV_BACK || choice === 'exit') break;
 
-    if (choice === 'add' || choice === 'commit' || choice === 'push') {
+    if (choice === 'commit' || choice === 'push') {
       await pickSound(choice);
       continue;
     }

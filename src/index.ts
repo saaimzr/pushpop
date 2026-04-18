@@ -48,8 +48,8 @@ program
 program
   .command('play')
   .description('Play the sound for an event (called internally by git hooks)')
-  .option('--event <event>', 'Event type: add, commit, or push', 'commit')
-  .action((opts: { event: 'add' | 'commit' | 'push' }) => runPlay(opts.event));
+  .option('--event <event>', 'Event type: commit or push', 'commit')
+  .action((opts: { event: 'commit' | 'push' }) => runPlay(opts.event));
 
 program
   .command('uninstall')

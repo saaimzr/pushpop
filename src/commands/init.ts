@@ -1,10 +1,16 @@
 import * as fs from 'fs';
 import { ensureDirs, PUSHPOP_DIR, HOOKS_DIR } from '../lib/config.js';
 import { installHooks, setGlobalHooksPath } from '../lib/hooks.js';
-import { ok, fail } from '../lib/ui.js';
+import { ok, fail, warn } from '../lib/ui.js';
 
 export function runInit(): void {
   const alreadyExists = fs.existsSync(PUSHPOP_DIR);
+
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    warn(
+      'pushpop plays audio on macOS and Windows only. You can still configure assignments, but no sound will play on this platform.',
+    );
+  }
 
   try {
     ensureDirs();
