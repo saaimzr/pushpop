@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync, spawn } from 'child_process';
-//ripppppppp
+//rippppppppp
 const PACKAGE_NAME = 'pushpopper';
 const MANUAL_COMMAND = `npm uninstall -g ${PACKAGE_NAME}`;
 
