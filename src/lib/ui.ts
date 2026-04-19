@@ -13,59 +13,15 @@ export const white = W;
 export const dim = DIM;
 export const warnColor = WARN;
 
-// The interactive dashboard mixes prompt-owned redraws with a few direct status
-// writes, so we intentionally clear both the viewport and scrollback there.
-// Preserving native scrollback in this model causes stacked banner/frame output.
+// Clears the visible viewport and homes the cursor. Deliberately does NOT
+// emit \x1B[3J — preserving native terminal scrollback is required so the
+// dashboard banner (printed once at session start) remains reachable via the
+// user's mouse-wheel scroll.
 export function clearScreen(): void {
-  process.stdout.write('\x1B[2J\x1B[3J\x1B[0;0H');
-}
-
-let altScreenActive = false;
-
-export function enterAltScreen(): void {
-  if (altScreenActive) return;
-  altScreenActive = true;
-  // Switch to alternate screen buffer + hide cursor. Matches htop/vim/less behavior:
-  // the user's prior terminal contents are restored on exit.
-  process.stdout.write('\x1B[?1049h\x1B[?25l');
-  process.on('exit', restoreTerminal);
-  process.on('SIGINT', handleSignal);
-  process.on('SIGTERM', handleSignal);
-  process.on('uncaughtException', handleFatal);
-}
-
-function restoreTerminal(): void {
-  if (!altScreenActive) return;
-  altScreenActive = false;
-  try {
-    if (process.stdin.isTTY) process.stdin.setRawMode(false);
-  } catch {}
-  process.stdout.write('\x1B[?25h\x1B[?1049l');
-}
-
-/**
- * Leave the alternate screen buffer without exiting the process. Use this
- * when the caller wants further output (e.g. an uninstall goodbye message)
- * to remain in the user's scrollback after pushpop exits.
- */
-export function exitAltScreen(): void {
-  restoreTerminal();
-}
-
-function handleSignal(): void {
-  restoreTerminal();
-  process.exit(130);
-}
-
-function handleFatal(err: unknown): void {
-  restoreTerminal();
-  // Re-throw so Node prints the stack after the terminal is restored.
-  console.error(err);
-  process.exit(1);
+  process.stdout.write('\x1B[2J\x1B[0;0H');
 }
 
 export function exitClean(code = 0): never {
-  restoreTerminal();
   try {
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
   } catch {}

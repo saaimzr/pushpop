@@ -23,8 +23,6 @@ import {
 } from '../lib/license.js';
 import {
   banner,
-  clearScreen,
-  enterAltScreen,
   statusPanel,
   ok,
   purple,
@@ -111,15 +109,16 @@ function getStatusLines(): { label: string; value: string }[] {
 }
 
 function getFrame(extraLines: string[] = []): string {
-  const parts = ['\n' + banner(version) + '\n', statusPanel(getStatusLines())];
+  const parts = [statusPanel(getStatusLines())];
   if (extraLines.length > 0) parts.push('', ...extraLines);
   return parts.join('\n');
 }
 
-function printHeader(extraLines: string[] = []): void {
-  clearScreen();
-  console.log('');
-  console.log(banner(version));
+// Prints status + transient extra lines into scrollback. Does NOT reprint the
+// banner — the banner is emitted once at session start and lives in scrollback
+// so the user can mouse-wheel up to see it. Reprinting it here would re-create
+// the historical "banner stacking" bug.
+function printTransient(extraLines: string[] = []): void {
   console.log('');
   console.log(statusPanel(getStatusLines()));
 
@@ -196,8 +195,8 @@ async function pickFromList(
     let previewLine = `  ${dim('(audio file not found)')}`;
 
     if (filePath) {
-      clearScreen();
-      console.log(getFrame([`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`]));
+      console.log('');
+      console.log(`  ${purple('♪')}  ${white(`Now playing: ${chosen.name}`)}`);
       const playback = await playSound(chosen, { mode: 'preview' });
       if (playback.started) {
         previewLine = `  ${purple('♪')}  ${white(`Played: ${chosen.name}`)}`;
@@ -277,7 +276,7 @@ async function pickSound(event: 'commit' | 'push'): Promise<void> {
     } else {
       const sounds = getSoundsForGenre(genreId);
       if (sounds.length === 0) {
-        printHeader([`  ${purple('○')}  No sounds in this pack yet - check back soon.`]);
+        printTransient([`  ${purple('○')}  No sounds in this pack yet - check back soon.`]);
         await sleep(1800);
         continue;
       }
@@ -343,10 +342,10 @@ async function addCustomSound(): Promise<void> {
     let filePath: string | null = null;
 
     if (method === 'browse') {
-      printHeader([...getAddCustomLines(), `  ${dim('Opening file picker...')}`]);
+      printTransient([...getAddCustomLines(), `  ${dim('Opening file picker...')}`]);
       filePath = openFilePicker();
       if (!filePath) {
-        printHeader([...getAddCustomLines(), `  ${dim('No file selected.')}`]);
+        printTransient([...getAddCustomLines(), `  ${dim('No file selected.')}`]);
         await sleep(800);
         continue;
       }
@@ -444,7 +443,7 @@ async function manageCustomSounds(): Promise<void> {
       ok(`Deleted "${sound.name}"`);
       await sleep(900);
     } catch (error: unknown) {
-      printHeader([`  ${warnColor(error instanceof Error ? error.message : String(error))}`]);
+      printTransient([`  ${warnColor(error instanceof Error ? error.message : String(error))}`]);
       await sleep(1600);
     }
   }
@@ -536,10 +535,14 @@ export async function runDashboard(): Promise<void> {
     | 'uninstall'
     | 'exit';
 
-  // Keep the dashboard in the alternate screen buffer. Removing this causes
-  // banner/frame redraws from prompt and non-prompt paths to stack in normal
-  // terminal scrollback on Git Bash and similar terminals.
-  enterAltScreen();
+  // Print the banner exactly once, at the very top of the session, into
+  // normal terminal scrollback. Subsequent prompts render below it via
+  // inquirer's in-place redraw cycle, so the banner is never re-emitted —
+  // this is what prevents the historical "banner stacking" bug while still
+  // allowing the user's native mouse-wheel to scroll back to it.
+  console.log('');
+  console.log(banner(version));
+  console.log('');
 
   if (!hooksInstalled()) {
     const answer = await promptInitMissing();

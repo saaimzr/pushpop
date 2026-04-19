@@ -3,7 +3,7 @@ import * as readline from 'readline';
 import { deleteLegacyConfigFile, LEGACY_CONFIG_PATH, PUSHPOP_DIR } from '../lib/config.js';
 import { unsetGlobalHooksPath, removeHooks } from '../lib/hooks.js';
 import { scheduleSelfUninstall } from '../lib/self-uninstall.js';
-import { purple, white, dim, exitClean, exitAltScreen } from '../lib/ui.js';
+import { purple, white, dim, exitClean } from '../lib/ui.js';
 
 function confirm(question: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -30,8 +30,6 @@ export async function runUninstall(): Promise<void> {
     console.log('  Aborted.');
     return;
   }
-
-  exitAltScreen();
 
   console.log('');
   console.log(`   ${purple('♪')}    ${white('Goodbye from pushpop')}`);
