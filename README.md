@@ -68,6 +68,25 @@ Pushpop ships with built-in sounds across 5 genres:
   
 ---
 
+## Free vs Pro
+
+
+|                      | Free         | Pro            |
+| -------------------- | ------------ | -------------- |
+| Built-in sound packs | ◆ All genres | ◆ All genres   |
+| Custom uploads       | 2 max        | Unlimited      |
+| Price                | Free         | $1.29 one-time |
+
+
+► **[Grab Pro here](https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS)** — Thanks for your support :)
+
+Once you have a key:
+
+```bash
+pushpop activate YOUR-LICENSE-KEY
+
+```
+
 ## Platform Support
 
 **macOS** via `afplay` · **Windows** via WMP COM / `ffplay` / PowerShell fallback chain. Requires a modern terminal (Windows Terminal, Terminal.app, iTerm2, VS Code).
@@ -95,24 +114,6 @@ Removes hooks, restores your previous `core.hooksPath`, clears `~/.pushpop`, and
 
 Run `pushpop doctor` for full diagnostics. For verbose audio logging: `PUSHPOP_DEBUG_AUDIO=1 pushpop`.
 
-## Free vs Pro
-
-
-|                      | Free         | Pro            |
-| -------------------- | ------------ | -------------- |
-| Built-in sound packs | ◆ All genres | ◆ All genres   |
-| Custom uploads       | 2 max        | Unlimited      |
-| Price                | Free         | $1.29 one-time |
-
-
-► **[Grab Pro here](https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS)** — Thanks for your support :)
-
-Once you have a key:
-
-```bash
-pushpop activate YOUR-LICENSE-KEY
-
-```
 
 ## Feedback
 
