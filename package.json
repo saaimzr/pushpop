@@ -1,6 +1,6 @@
 {
   "name": "pushpopper",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Producer-style audio tags for your git commits and pushes",
   "type": "module",
   "main": "dist/index.js",
