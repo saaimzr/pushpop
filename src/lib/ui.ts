@@ -1,6 +1,5 @@
 import { execFileSync } from 'child_process';
 import chalk from 'chalk';
-import figlet from 'figlet';
 import boxen from 'boxen';
 import { POLAR_CHECKOUT_URL, PRICE } from './license.js';
 
@@ -77,21 +76,29 @@ export function exitClean(code = 0): never {
 let cachedBanner: string | null = null;
 let cachedBannerKey: string | null = null;
 
+const SOLID_LETTERS: Record<string, string[]> = {
+  p: ['███ ', '█  █', '███ ', '█   ', '█   '],
+  u: ['█  █', '█  █', '█  █', '█  █', ' ██ '],
+  s: ['███ ', '█   ', ' ██ ', '  █ ', '███ '],
+  h: ['█  █', '█  █', '████', '█  █', '█  █'],
+  o: [' ██ ', '█  █', '█  █', '█  █', ' ██ '],
+};
+
+const SOLID_TITLE = buildSolidTitle('pushpop');
+
 export function banner(version: string): string {
-  const isNarrow = (process.stdout.columns ?? 80) < 50;
-  const cacheKey = `${version}:${isNarrow ? 'narrow' : 'full'}`;
+  const title = resolveBannerTitle(process.stdout.columns ?? 80);
+  const cacheKey = `${version}:${title === null ? 'narrow' : 'full'}`;
 
   if (cachedBanner !== null && cachedBannerKey === cacheKey) {
     return cachedBanner;
   }
 
-  if (isNarrow) {
+  if (title === null) {
     cachedBanner = P(`pushpop v${version}`);
     cachedBannerKey = cacheKey;
     return cachedBanner;
   }
-
-  const title = figlet.textSync('pushpop', { font: 'Small', horizontalLayout: 'default' });
   // Mascot frame: each line is exactly 27 columns wide so the right-hand
   // decorations line up with the left. Musical-note glyphs (♫ ♪ ♬) render
   // as single-cell in every modern terminal we target (Windows Terminal,
@@ -106,12 +113,35 @@ export function banner(version: string): string {
 
   cachedBanner = [
     P(title),
-    P(`                         v${version}`),
+    P(rightAlignVersion(version, title)),
     '',
     P(mascot),
   ].join('\n');
   cachedBannerKey = cacheKey;
   return cachedBanner;
+}
+
+function buildSolidTitle(text: string): string {
+  const glyphs = text.split('').map((char) => SOLID_LETTERS[char] ?? [char, '', '', '', '']);
+  return Array.from({ length: 5 }, (_, row) => glyphs.map((glyph) => glyph[row]).join(' ')).join('\n');
+}
+
+function resolveBannerTitle(columns: number): string | null {
+  if (columns >= measureTextWidth(SOLID_TITLE)) {
+    return SOLID_TITLE;
+  }
+
+  return null;
+}
+
+function rightAlignVersion(version: string, title: string): string {
+  const versionText = `v${version}`;
+  const padding = Math.max(0, measureTextWidth(title) - versionText.length);
+  return `${' '.repeat(padding)}${versionText}`;
+}
+
+function measureTextWidth(text: string): number {
+  return text.split('\n').reduce((max, line) => Math.max(max, line.length), 0);
 }
 
 export function statusPanel(lines: { label: string; value: string }[]): string {
