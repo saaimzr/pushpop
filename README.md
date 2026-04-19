@@ -10,7 +10,7 @@ pushpop installs global Git hooks on your machine, gives you an interactive dash
 npm install -g pushpopper
 ```
 
-Requires Node.js 18 or higher.
+Requires Node.js 20 or higher.
 
 ## Quick start
 

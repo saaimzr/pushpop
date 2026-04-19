@@ -1,9 +1,20 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
 import { deleteLegacyConfigFile, LEGACY_CONFIG_PATH, PUSHPOP_DIR } from '../lib/config.js';
-import { unsetGlobalHooksPath, removeHooks } from '../lib/hooks.js';
+import { removeHooks, unsetGlobalHooksPath } from '../lib/hooks.js';
 import { scheduleSelfUninstall } from '../lib/self-uninstall.js';
-import { purple, white, dim, exitClean } from '../lib/ui.js';
+import { dim, exitClean, purple, white } from '../lib/ui.js';
+
+export interface UninstallStep {
+  label: string;
+  status: 'success' | 'warning' | 'info';
+}
+
+export interface UninstallResult {
+  steps: UninstallStep[];
+  spawned: boolean;
+  manualCommand: string;
+}
 
 function confirm(question: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -12,21 +23,61 @@ function confirm(question: string): Promise<boolean> {
       rl.close();
       resolve(false);
     });
-    rl.question(question, (ans) => {
+    rl.question(question, (answer) => {
       rl.close();
-      resolve(ans.trim().toLowerCase() === 'y');
+      resolve(answer.trim().toLowerCase() === 'y');
     });
   });
 }
 
-function check(label: string): void {
-  console.log(`  ${label.padEnd(32)} ${purple('✓')}`);
+function printStep(step: UninstallStep): void {
+  const symbol = step.status === 'success' ? purple('✓') : dim(step.status === 'warning' ? '!' : '•');
+  console.log(`  ${step.label.padEnd(32)} ${symbol}`);
+}
+
+export function performUninstall(): UninstallResult {
+  const steps: UninstallStep[] = [];
+
+  try {
+    removeHooks();
+    steps.push({ label: 'Removing hooks...', status: 'success' });
+  } catch {
+    steps.push({ label: 'Could not remove hooks.', status: 'warning' });
+  }
+
+  try {
+    unsetGlobalHooksPath();
+    steps.push({ label: 'Restoring core.hooksPath...', status: 'success' });
+  } catch {
+    steps.push({ label: 'Could not restore core.hooksPath.', status: 'warning' });
+  }
+
+  if (fs.existsSync(PUSHPOP_DIR)) {
+    try {
+      fs.rmSync(PUSHPOP_DIR, { recursive: true, force: true });
+      steps.push({ label: `Clearing ${PUSHPOP_DIR}...`, status: 'success' });
+    } catch {
+      steps.push({ label: `Could not delete ${PUSHPOP_DIR}.`, status: 'warning' });
+    }
+  }
+
+  if (fs.existsSync(LEGACY_CONFIG_PATH)) {
+    deleteLegacyConfigFile();
+    steps.push({ label: 'Clearing legacy config...', status: 'success' });
+  }
+
+  const { spawned, manualCommand } = scheduleSelfUninstall();
+  if (spawned) {
+    steps.push({ label: 'Removing the CLI binary...', status: 'info' });
+  }
+
+  return { steps, spawned, manualCommand };
 }
 
 export async function runUninstall(): Promise<void> {
-  const yes = await confirm('Remove pushpop hooks, config, and the CLI itself? (y/N) ');
+  const confirmed = await confirm('Remove pushpop hooks, config, and the CLI itself? (y/N) ');
 
-  if (!yes) {
+  if (!confirmed) {
     console.log('  Aborted.');
     return;
   }
@@ -36,46 +87,19 @@ export async function runUninstall(): Promise<void> {
   console.log(`         ${dim('Thanks for shipping with us.')}`);
   console.log('');
 
-  try {
-    removeHooks();
-    check('Removing hooks...');
-  } catch {
-    console.log(`  ${dim('Could not remove hooks.')}`);
-  }
+  const result = performUninstall();
+  result.steps.forEach(printStep);
 
-  try {
-    unsetGlobalHooksPath();
-    check('Restoring core.hooksPath...');
-  } catch {
-    console.log(`  ${dim('Could not restore core.hooksPath (already unset?)')}`);
-  }
-
-  if (fs.existsSync(PUSHPOP_DIR)) {
-    try {
-      fs.rmSync(PUSHPOP_DIR, { recursive: true, force: true });
-      check(`Clearing ${PUSHPOP_DIR}...`);
-    } catch {
-      console.log(`  ${dim(`Could not delete ${PUSHPOP_DIR}.`)}`);
-    }
-  }
-
-  if (fs.existsSync(LEGACY_CONFIG_PATH)) {
-    deleteLegacyConfigFile();
-    check('Clearing legacy config...');
-  }
-
-  const { spawned, manualCommand } = scheduleSelfUninstall();
-  if (spawned) {
-    console.log(`  ${'Removing the CLI binary...'.padEnd(32)} ${dim('(running in background)')}`);
+  if (result.spawned) {
     console.log('');
     console.log(`  ${dim('The pushpop command will disappear from your PATH in a moment.')}`);
   } else {
     console.log('');
     console.log(`  ${purple('♪')}  ${white('Almost done - one manual step:')}`);
     console.log(`  ${dim('Run this to remove the pushpop binary from your system:')}`);
-    console.log(`    ${purple(manualCommand)}`);
+    console.log(`    ${purple(result.manualCommand)}`);
   }
-  console.log('');
 
+  console.log('');
   exitClean(0);
 }

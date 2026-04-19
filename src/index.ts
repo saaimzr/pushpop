@@ -83,8 +83,6 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    process.on('SIGINT', () => exitClean(0));
-
     try {
       await runDashboard();
       exitClean(0);

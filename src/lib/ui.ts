@@ -55,15 +55,16 @@ export function banner(version: string): string {
     cachedBannerKey = cacheKey;
     return cachedBanner;
   }
-  // Mascot frame: each line is exactly 27 columns wide so the right-hand
+  // Mascot frame: each line is kept to a compact fixed width so the right-hand
   // decorations line up with the left. Musical-note glyphs (♫ ♪ ♬) render
   // as single-cell in every modern terminal we target (Windows Terminal,
   // Terminal.app, iTerm2, VS Code), so plain character counting works.
   const mascot = [
     '♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪',
-    '♪     ╭─────────────╮     ♪',
-    '♫    ▐██▌  ◕ ‿ ◕  ▐██▌    ♫',
-    '♪                         ♪',
+    '♪    ▐██▌╭───────╮▐██▌    ♪',
+    '♫     ▗▄███████████▄▖     ♫',
+    '♪     ▐█   ◕ ‿ ◕   █▌     ♪',
+    '♫     ▝▀███████████▀▘     ♫',
     '♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫',
   ].join('\n');
 

@@ -1,8 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ensureDirs, PUSHPOP_DIR, HOOKS_DIR } from '../lib/config.js';
+import { ensureDirs, HOOKS_DIR, PUSHPOP_DIR } from '../lib/config.js';
 import { getHooksPathDiagnostics, installHooks, setGlobalHooksPath } from '../lib/hooks.js';
-import { ok, fail, warn, dim } from '../lib/ui.js';
+import { dim, fail, ok, warn } from '../lib/ui.js';
+
+export interface InitNote {
+  tone: 'success' | 'warning' | 'info';
+  message: string;
+}
+
+export interface InitResult {
+  notes: InitNote[];
+}
 
 function detectHusky(startDir: string): string | null {
   let current = path.resolve(startDir);
@@ -20,7 +29,7 @@ function detectHusky(startDir: string): string | null {
           return current;
         }
       } catch {
-        // ignore unreadable package.json files
+        // Ignore unreadable package.json files.
       }
     }
 
@@ -32,76 +41,117 @@ function detectHusky(startDir: string): string | null {
   return null;
 }
 
-function printRepoHookWarning(): void {
-  const huskyRoot = detectHusky(process.cwd());
-  const hooksPath = getHooksPathDiagnostics(process.cwd());
+function getRepoHookNotes(startDir = process.cwd()): InitNote[] {
+  const notes: InitNote[] = [];
+  const huskyRoot = detectHusky(startDir);
+  const hooksPath = getHooksPathDiagnostics(startDir);
   const hasRepoLocalHooksPath = Boolean(hooksPath.repoRoot && hooksPath.localHooksPath);
 
   if (!huskyRoot && !hasRepoLocalHooksPath) {
-    return;
+    return notes;
   }
 
-  console.log('');
   if (huskyRoot) {
-    warn(`Husky detected near ${huskyRoot}`);
+    notes.push({ tone: 'warning', message: `Husky detected near ${huskyRoot}` });
   }
 
   if (hasRepoLocalHooksPath && hooksPath.repoRoot) {
-    warn(`Repo-local core.hooksPath detected in ${hooksPath.repoRoot}: ${hooksPath.localHooksPath}`);
+    notes.push({
+      tone: 'warning',
+      message: `Repo-local core.hooksPath detected in ${hooksPath.repoRoot}: ${hooksPath.localHooksPath}`,
+    });
   }
 
-  console.log(
-    `  ${dim('pushpop init only configures the global hooksPath. Repo-local hook setups may bypass it.')}`
-  );
+  notes.push({
+    tone: 'info',
+    message: 'pushpop init only configures the global hooksPath. Repo-local hook setups may bypass it.',
+  });
 
   if (hooksPath.overridesGlobal) {
-    console.log(
-      `  ${dim('This repo appears to override the global hooksPath, so pushpop may stay silent here.')}`
-    );
+    notes.push({
+      tone: 'warning',
+      message: 'This repo appears to override the global hooksPath, so pushpop may stay silent here.',
+    });
   }
+
+  return notes;
 }
 
-export function runInit(): void {
+export function performInit(startDir = process.cwd()): InitResult {
   const alreadyExists = fs.existsSync(PUSHPOP_DIR);
+  const notes: InitNote[] = [];
 
   if (process.platform === 'linux') {
-    warn('Linux playback remains best-effort, but this release only officially supports Windows and macOS.');
+    notes.push({
+      tone: 'warning',
+      message: 'Linux playback remains best-effort, but this release only officially supports Windows and macOS.',
+    });
   }
 
   try {
     ensureDirs();
-  } catch (e: unknown) {
-    fail(e instanceof Error ? e.message : String(e));
-    process.exit(1);
+  } catch (error: unknown) {
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 
   try {
     installHooks();
-  } catch (e: unknown) {
-    fail(`Failed to install hooks: ${e instanceof Error ? e.message : String(e)}`);
-    process.exit(1);
+  } catch (error: unknown) {
+    throw new Error(`Failed to install hooks: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {
     setGlobalHooksPath();
-  } catch (e: unknown) {
-    fail(`Failed to set git config: ${e instanceof Error ? e.message : String(e)}\n  Is git installed?`);
-    process.exit(1);
+  } catch (error: unknown) {
+    throw new Error(`Failed to set git config: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (alreadyExists) {
-    ok('pushpop updated - hooks reinstalled');
-    ok(`Hooks directory: ${HOOKS_DIR}`);
-    printRepoHookWarning();
+    notes.push({ tone: 'success', message: 'pushpop updated - hooks reinstalled' });
+    notes.push({ tone: 'success', message: `Hooks directory: ${HOOKS_DIR}` });
+  } else {
+    notes.push({ tone: 'success', message: `Created ${PUSHPOP_DIR}` });
+    notes.push({ tone: 'success', message: `Installed hooks to ${HOOKS_DIR}` });
+    notes.push({ tone: 'success', message: 'Set git config --global core.hooksPath' });
+    notes.push({ tone: 'info', message: 'pushpop is ready. Run pushpop to set up your first sound.' });
+  }
+
+  notes.push(...getRepoHookNotes(startDir));
+  return { notes };
+}
+
+function printNote(note: InitNote): void {
+  if (note.tone === 'success') {
+    ok(note.message);
     return;
   }
 
-  console.log('');
-  ok(`Created ${PUSHPOP_DIR}`);
-  ok(`Installed hooks to ${HOOKS_DIR}`);
-  ok('Set git config --global core.hooksPath');
-  printRepoHookWarning();
-  console.log('');
-  console.log('  pushpop is ready. Run pushpop to set up your first sound.');
-  console.log('');
+  if (note.tone === 'warning') {
+    warn(note.message);
+    return;
+  }
+
+  console.log(`  ${dim(note.message)}`);
+}
+
+export function runInit(): void {
+  try {
+    const result = performInit(process.cwd());
+    console.log('');
+    result.notes.forEach(printNote);
+    console.log('');
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      if (error.message.includes('Could not create ~/.pushpop directory')) {
+        fail(error.message);
+      } else if (error.message.includes('git')) {
+        fail(`${error.message}\n  Is git installed?`);
+      } else {
+        fail(error.message);
+      }
+    } else {
+      fail(String(error));
+    }
+    process.exit(1);
+  }
 }
