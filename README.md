@@ -1,3 +1,5 @@
+<img width="831" height="496" alt="pushpop_final" src="https://github.com/user-attachments/assets/dcb276ad-6e32-45de-9a21-c8730981f180" />
+
 # ♫ pushpop ♫
 
 > Play a custom audio tag every time you `git commit` or `git push`.
@@ -20,7 +22,7 @@ Play a custom audio tag every time you `git commit` or `git push`. Choose from b
 npm install -g pushpopper
 ```
 
-> Requires Node.js 18 or higher. Audio playback is supported on **macOS** and **Windows** only — Linux is not supported in this release.
+> Requires Node.js 20 or higher. Supported on **macOS** and **Windows** only — Linux is not supported in this release.
 
 ---
 
@@ -36,20 +38,20 @@ pushpop
 # 3. Pick a sound, assign it to commit or push, done
 ```
 
-That's it. Next time you `git commit` or `git push`, your sound plays. 🎵
+That's it. Next time you `git commit` or `git push`, your sound plays in any repo on your machine. No per-repo config needed.🎵
 
 ---
 
 ## Commands
 
-
-| Command                  | What it does                                   |
-| ------------------------ | ---------------------------------------------- |
-| `pushpop`                | Open the interactive dashboard                 |
-| `pushpop init`           | First-time setup — installs git hooks globally |
-| `pushpop upload <file>`  | Add a custom audio file (MP3, WAV)             |
-| `pushpop activate <key>` | Unlock Pro with your license key               |
-| `pushpop uninstall`      | Remove everything cleanly                      |
+| Command | Description |
+| --- | --- |
+| `pushpop` | Open the interactive dashboard |
+| `pushpop init` | Install global Git hooks and set `core.hooksPath` |
+| `pushpop activate <key>` | Unlock Pro with a Polar license key |
+| `pushpop doctor` | Print troubleshooting diagnostics (audio, hooks, config) |
+| `pushpop uninstall` | Remove hooks, config, and attempt to remove the CLI |
+| `pushpop --version` | Print the installed version |
 
 
 ---
@@ -58,21 +60,28 @@ That's it. Next time you `git commit` or `git push`, your sound plays. 🎵
 
 Pushpop ships with built-in sounds across 5 genres:
 
-- ○ **General** — ka-ching, applause, gong
-- ⊕  **Gaming** — coin collects, level-ups, YOSHI
-- ≋ **Nature** — thunder, water drops
-- ✦ **Sci-Fi** — laser blasts, warp whooshes, synth beeps
-- ♫ **Producer Tags** — iconic tags from producers
-
+- ○  **Interactive terminal dashboard** — browse, preview, and assign sounds without leaving the terminal
+- ♫  **5 built-in sound packs** — General, Gaming, Nature, Sci-Fi, and Producer Tags
+- ⬆  **Custom uploads** — add your own `.mp3`, `.wav`, or `.m4a` files via the native macOS / Windows file picker or by pasting a path
+- ✦ **Volume control** — choose from 0 %, 25 %, 50 %, 75 %, or 100 %
+- ◌ **CI-safe** — hooks skip audio when `$CI` is set
+  
 ---
 
-## How it works
+## Platform Support
 
-pushpop installs a global git hook on your machine using `core.hooksPath`. This means it works automatically across every repo without any per-project setup.
+**macOS** via `afplay` · **Windows** via WMP COM / `ffplay` / PowerShell fallback chain. Requires a modern terminal (Windows Terminal, Terminal.app, iTerm2, VS Code).
 
-It plays nice with existing hooks too so if a repo already has Husky or lint-staged configured, pushpop chains onto those without breaking anything.
+## Uploads
 
----
+Upload `.mp3`, `.wav`, or `.m4a` files from the dashboard. Tags are capped at **5.5 s** — longer files are auto-trimmed when `ffmpeg` is installed. Preview before saving.
+
+
+## How It Works
+
+pushpop sets a **global `core.hooksPath`** (`~/.pushpop/hooks/`), so every repo works without per-project config. Hooks are CI-safe, debounce within 2 s, and chain to existing repo-local hooks. Config lives in `~/.pushpop/config.json`.
+
+> **Note:** Repo-local hook managers (Husky, Lefthook) or a repo-level `core.hooksPath` can override the global hooks. Run `pushpop doctor` to diagnose.
 
 ## Uninstall
 
@@ -80,9 +89,11 @@ It plays nice with existing hooks too so if a repo already has Husky or lint-sta
 pushpop uninstall
 ```
 
-This removes the git hooks, restores your git config, and deletes the `~/.pushpop` directory. Clean slate, no leftovers.
+Removes hooks, restores your previous `core.hooksPath`, clears `~/.pushpop`, and schedules `npm uninstall -g pushpopper`.
 
----
+## Troubleshooting
+
+Run `pushpop doctor` for full diagnostics. For verbose audio logging: `PUSHPOP_DEBUG_AUDIO=1 pushpop`.
 
 ## Free vs Pro
 
@@ -94,13 +105,20 @@ This removes the git hooks, restores your git config, and deletes the `~/.pushpo
 | Price                | Free         | $1.29 one-time |
 
 
-👉 **[Grab Pro here](https://pushpop.lemonsqueezy.com)** — Thanks for your support :)
+👉 **[Grab Pro here](https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS)** — Thanks for your support :)
 
 Once you have a key:
 
 ```bash
-pushpop activate YOUR-LICENSE-KEY
+pushpop activate YOUR-LICENSE-KEY<img width="831" height="496" alt="pushpop_final" src="https://github.com/user-attachments/assets/0d8f61a4-eb31-4f1c-9bd9-979965ab8da8" />
+
 ```
+
+## Feedback
+
+Bug reports, feature requests, and producer-tag suggestions, etc are all welcome:
+
+✉  **saaim.raad3@gmail.com**
 
 ---
 
