@@ -456,6 +456,8 @@ async function showHelpInfo(): Promise<void> {
     '',
     `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
     `  ${dim('After that, every repo on this machine works without per-project setup.')}`,
+    `  ${dim('Use "Add custom sound" in this dashboard to upload your own audio tags.')}`,
+    `  ${dim('Best in modern interactive terminals with ANSI/Unicode support.')}`,
     '',
     `  ${white('Upgrade to Pro:')} ${dim(POLAR_CHECKOUT_URL)}`,
     `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,

@@ -31,7 +31,7 @@ function buildUploadFrame(
 ): string {
   const lines = [
     `  ${white(`Ready to save "${tagName}"`)}`,
-    `  ${dim('Note: Custom tags are limited to 3 seconds. Longer files will be automatically truncated.')}`,
+    `  ${dim(`Note: Custom tags are limited to ${MAX_DURATION_SEC.toFixed(1)} seconds. Longer files will be automatically truncated.`)}`,
     `  ${dim(`Source length: ${sourceDurationSec.toFixed(1)}s`)}`,
     wasTruncated
       ? `  ${white(`Final tag: first ${MAX_DURATION_SEC.toFixed(1)}s will be saved`)}` 

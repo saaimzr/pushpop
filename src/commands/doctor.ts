@@ -4,7 +4,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { CONFIG_PATH, getConfig, getLifetimeCustomUploads, HOOKS_DIR } from '../lib/config.js';
 import { detectAvailablePlaybackBackend, isFfmpegAvailable, resolveSoundPath } from '../lib/audio.js';
-import { resolvePushpopBinaryPath } from '../lib/hooks.js';
+import { getHooksPathDiagnostics, resolvePushpopBinaryPath } from '../lib/hooks.js';
 import { isPro } from '../lib/license.js';
 
 function readCommandOutput(command: string, args: string[]): string | null {
@@ -51,6 +51,16 @@ export function runDoctor(): void {
   const ffmpeg = isFfmpegAvailable() ? 'available' : 'missing';
   const backend = detectAvailablePlaybackBackend();
   const binaryPath = resolvePushpopBinaryPath() ?? 'pushpop';
+  const hooksPath = getHooksPathDiagnostics();
+  const terminalInput = process.stdin.isTTY === true ? 'yes' : 'no';
+  const terminalOutput = process.stdout.isTTY === true ? 'yes' : 'no';
+  const hooksOverride = hooksPath.repoRoot
+    ? hooksPath.localHooksPath
+      ? hooksPath.overridesGlobal
+        ? 'repo-local overrides global'
+        : 'repo-local set (matches global)'
+      : 'none'
+    : 'n/a';
 
   const lines = [
     'pushpop doctor',
@@ -58,10 +68,18 @@ export function runDoctor(): void {
     `os: ${os.platform()} ${os.release()} (${os.arch()})`,
     `node: ${nodeVersion}`,
     `git: ${gitVersion}`,
+    `stdin tty: ${terminalInput}`,
+    `stdout tty: ${terminalOutput}`,
+    `TERM: ${process.env.TERM ?? 'unset'}`,
+    `TERM_PROGRAM: ${process.env.TERM_PROGRAM ?? 'unset'}`,
     `ffmpeg: ${ffmpeg}`,
     `audio backend: ${backend}`,
     `pushpop bin: ${binaryPath}`,
     `config: ${CONFIG_PATH}`,
+    `global hooksPath: ${hooksPath.globalHooksPath ?? 'unset'}`,
+    `repo root: ${hooksPath.repoRoot ?? 'not in git repo'}`,
+    `repo hooksPath: ${hooksPath.repoRoot ? hooksPath.localHooksPath ?? 'unset' : 'n/a'}`,
+    `hooksPath override: ${hooksOverride}`,
     `post-commit hook: ${describeHook('post-commit')}`,
     `pre-push hook: ${describeHook('pre-push')}`,
     formatAssignment('commit'),

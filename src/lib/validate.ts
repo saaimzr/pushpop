@@ -3,7 +3,7 @@ import * as path from 'path';
 
 const SUPPORTED_CONTAINERS = ['MPEG', 'WAVE', 'M4A/mp42/isom', 'M4A', 'AAC'];
 const SUPPORTED_EXTS = ['.mp3', '.wav', '.m4a'];
-export const MAX_DURATION_SEC = 3.0;
+export const MAX_DURATION_SEC = 5.5;
 
 export interface AudioInfo {
   durationSec: number;

@@ -2,7 +2,7 @@
 
 > Play a short producer-style audio tag every time you `git commit` or `git push`.
 
-pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports custom uploads, and works across macOS, Windows, and Linux boxes that have a usable local audio backend.
+pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports custom uploads from inside the dashboard, and officially supports Windows and macOS.
 
 ## Install
 
@@ -21,7 +21,7 @@ pushpop init
 # 2. Open the dashboard
 pushpop
 
-# 3. Pick a sound for commit and/or push
+# 3. Pick sounds, upload custom tags, and set volume
 ```
 
 ## Commands
@@ -30,39 +30,35 @@ pushpop
 | --- | --- |
 | `pushpop` | Open the interactive dashboard |
 | `pushpop init` | Install global Git hooks and set `core.hooksPath` |
-| `pushpop upload <file>` | Add a custom audio file with preview (`.mp3`, `.wav`, `.m4a`) |
 | `pushpop activate <key>` | Unlock Pro with your Polar license key |
 | `pushpop doctor` | Print troubleshooting details about audio, hooks, and config |
 | `pushpop uninstall` | Remove hooks, config, and attempt to remove the global CLI |
+| `pushpop help` | Show CLI usage and available commands |
+| `pushpop --version` | Print the installed version |
 
 ## Features
 
 - Interactive terminal dashboard for sound assignment
 - Built-in sound packs across General, Gaming, Nature, Sci-Fi, and Producer Tags
-- Custom uploads with preview-before-save
-- Automatic truncation to the first 3 seconds when `ffmpeg` is available
+- Dashboard-based custom uploads with preview-before-save
+- Automatic truncation to the first 5.5 seconds when `ffmpeg` is available
 - Runtime volume control with presets from `0%` to `100%`
 - Pro-only custom sound management for deleting uploaded sounds
 - Global Git hook installation with repo-hook chaining
 
-## Platform support
+## Platform and Terminal Support
 
 - macOS: supported via `afplay`
 - Windows: supported via Windows Media Player COM, with `ffplay` and PowerShell fallbacks
-- Linux: supported via `paplay -> ffplay -> aplay -> mpg123`
 
-Linux caveats:
-
-- Headless servers stay silent instead of crashing.
-- `paplay` and `ffplay` respect pushpop volume.
-- `aplay` does not expose a clean volume flag, so WAV playback uses source volume.
+The dashboard is designed for modern interactive terminals with ANSI and Unicode support. Non-interactive shells and minimal terminals are not an official dashboard target. If you are diagnosing a terminal-specific issue, run `pushpop doctor`.
 
 ## Uploads and audio limits
 
-Custom uploads accept `.mp3`, `.wav`, and `.m4a`.
+Custom uploads happen from the dashboard and accept `.mp3`, `.wav`, and `.m4a`.
 
-- pushpop always warns before save that custom tags are limited to 3 seconds.
-- Files longer than 3 seconds are truncated to the first 3 seconds with `ffmpeg -t 3 -y`.
+- pushpop always warns before save that custom tags are limited to 5.5 seconds.
+- Files longer than 5.5 seconds are truncated to the first 5.5 seconds with `ffmpeg -t 5.5 -y`.
 - If `ffmpeg` is missing, long uploads are rejected with a clear install/trim message.
 - Before save, you can preview the final tag, confirm and save, or cancel.
 
@@ -117,7 +113,7 @@ Generated hooks:
 - resolve the pushpop binary path at install time
 - chain to repo-local `.git/hooks/post-commit` and `.git/hooks/pre-push` when present
 
-If `pushpop init` detects Husky near the current repo, it prints a copy-paste snippet you can add to the relevant Husky hook.
+`pushpop init` only configures the global `core.hooksPath`. If a specific repo uses its own hook manager or repo-local `core.hooksPath`, that repo can override the global setup.
 
 ## Uninstall
 
@@ -147,9 +143,11 @@ The doctor output includes:
 
 - OS and architecture
 - Node and Git versions
+- terminal interactivity details
 - `ffmpeg` availability
 - detected audio backend
 - config path
+- global and repo-local `core.hooksPath` status
 - installed hook files and executable state
 - current assignments, including missing-file flags
 - lifetime upload count

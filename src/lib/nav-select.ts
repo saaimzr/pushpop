@@ -108,6 +108,21 @@ function renderFrame(
     .join('\n');
 }
 
+function renderInputPrompt(
+  config: FrameConfig,
+  inputLine: string,
+  viewport: FrameViewport,
+  errorMsg?: string,
+): [string, string] {
+  const content = [viewport.content, W(config.message), inputLine]
+    .filter((line) => line && line.length > 0)
+    .join('\n');
+  const bottom = [errorMsg ? ERR(errorMsg) : undefined, DIM(getHelpText(config, viewport, 'input'))]
+    .filter((line) => line && line.length > 0)
+    .join('\n');
+  return [content, bottom];
+}
+
 function getScrollStep(viewport: FrameViewport): number {
   return Math.max(1, Math.floor(Math.max(1, viewport.availableRows) / 2));
 }
@@ -198,6 +213,7 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
         return;
       }
 
+      rl.write(nextValue);
       setError(typeof outcome === 'string' ? outcome : 'Please enter a valid value');
       setValue(nextValue);
       return;
@@ -215,8 +231,7 @@ const _inputPrompt = createPrompt<string, InputConfig>((config, done) => {
 
   const body = [`${P('>')} ${value}`];
   const viewport = getFrameViewport(config.frame, 1 + body.length + 1 + (errorMsg ? 1 : 0), frameOffset);
-  const content = renderFrame(config, body, viewport, 'input');
-  return [content, errorMsg ? ERR(errorMsg) : undefined];
+  return renderInputPrompt(config, body[0], viewport, errorMsg);
 });
 
 export async function navSelect<T>(config: {

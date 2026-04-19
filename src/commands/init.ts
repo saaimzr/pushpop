@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ensureDirs, PUSHPOP_DIR, HOOKS_DIR } from '../lib/config.js';
-import { installHooks, setGlobalHooksPath } from '../lib/hooks.js';
-import { ok, fail, warn, dim, purple } from '../lib/ui.js';
+import { getHooksPathDiagnostics, installHooks, setGlobalHooksPath } from '../lib/hooks.js';
+import { ok, fail, warn, dim } from '../lib/ui.js';
 
 function detectHusky(startDir: string): string | null {
   let current = path.resolve(startDir);
@@ -32,22 +32,40 @@ function detectHusky(startDir: string): string | null {
   return null;
 }
 
-function printHuskyHint(): void {
+function printRepoHookWarning(): void {
   const huskyRoot = detectHusky(process.cwd());
-  if (!huskyRoot) return;
+  const hooksPath = getHooksPathDiagnostics(process.cwd());
+  const hasRepoLocalHooksPath = Boolean(hooksPath.repoRoot && hooksPath.localHooksPath);
+
+  if (!huskyRoot && !hasRepoLocalHooksPath) {
+    return;
+  }
 
   console.log('');
-  warn(`Husky detected near ${huskyRoot}`);
-  console.log(`  ${dim('If your repo uses Husky hooks, add pushpop to the relevant file:')}`);
-  console.log(`    ${purple('pushpop play --event commit 2>/dev/null')}`);
-  console.log(`  ${dim('Use `--event push` inside .husky/pre-push if you want push audio too.')}`);
+  if (huskyRoot) {
+    warn(`Husky detected near ${huskyRoot}`);
+  }
+
+  if (hasRepoLocalHooksPath && hooksPath.repoRoot) {
+    warn(`Repo-local core.hooksPath detected in ${hooksPath.repoRoot}: ${hooksPath.localHooksPath}`);
+  }
+
+  console.log(
+    `  ${dim('pushpop init only configures the global hooksPath. Repo-local hook setups may bypass it.')}`
+  );
+
+  if (hooksPath.overridesGlobal) {
+    console.log(
+      `  ${dim('This repo appears to override the global hooksPath, so pushpop may stay silent here.')}`
+    );
+  }
 }
 
 export function runInit(): void {
   const alreadyExists = fs.existsSync(PUSHPOP_DIR);
 
   if (process.platform === 'linux') {
-    warn('Linux playback is supported when a local audio backend is available. Headless servers stay silent.');
+    warn('Linux playback remains best-effort, but this release only officially supports Windows and macOS.');
   }
 
   try {
@@ -74,7 +92,7 @@ export function runInit(): void {
   if (alreadyExists) {
     ok('pushpop updated - hooks reinstalled');
     ok(`Hooks directory: ${HOOKS_DIR}`);
-    printHuskyHint();
+    printRepoHookWarning();
     return;
   }
 
@@ -82,7 +100,7 @@ export function runInit(): void {
   ok(`Created ${PUSHPOP_DIR}`);
   ok(`Installed hooks to ${HOOKS_DIR}`);
   ok('Set git config --global core.hooksPath');
-  printHuskyHint();
+  printRepoHookWarning();
   console.log('');
   console.log('  pushpop is ready. Run pushpop to set up your first sound.');
   console.log('');

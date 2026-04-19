@@ -26,6 +26,56 @@ function toHookBinary(value: string): string {
   return process.platform === 'win32' ? value.replace(/\\/g, '/') : value;
 }
 
+function normalizeHooksPath(value: string, baseDir?: string): string {
+  if (!baseDir) {
+    return value.replace(/\\/g, '/');
+  }
+
+  if (path.isAbsolute(value)) {
+    return value.replace(/\\/g, '/');
+  }
+
+  return path.resolve(baseDir, value).replace(/\\/g, '/');
+}
+
+export function getGlobalHooksPath(): string | null {
+  return readFirstLine('git', ['config', '--global', '--get', 'core.hooksPath']);
+}
+
+export function resolveRepoRoot(startDir = process.cwd()): string | null {
+  return readFirstLine('git', ['-C', startDir, 'rev-parse', '--show-toplevel']);
+}
+
+export function getLocalHooksPath(startDir = process.cwd()): string | null {
+  const repoRoot = resolveRepoRoot(startDir);
+  if (!repoRoot) return null;
+  return readFirstLine('git', ['-C', repoRoot, 'config', '--local', '--get', 'core.hooksPath']);
+}
+
+export function getHooksPathDiagnostics(startDir = process.cwd()): {
+  globalHooksPath: string | null;
+  localHooksPath: string | null;
+  repoRoot: string | null;
+  overridesGlobal: boolean;
+} {
+  const globalHooksPath = getGlobalHooksPath();
+  const repoRoot = resolveRepoRoot(startDir);
+  const localHooksPath = repoRoot
+    ? readFirstLine('git', ['-C', repoRoot, 'config', '--local', '--get', 'core.hooksPath'])
+    : null;
+  const resolvedGlobal = globalHooksPath ? normalizeHooksPath(globalHooksPath) : null;
+  const resolvedLocal = repoRoot && localHooksPath
+    ? normalizeHooksPath(localHooksPath, repoRoot)
+    : null;
+
+  return {
+    globalHooksPath,
+    localHooksPath,
+    repoRoot,
+    overridesGlobal: Boolean(resolvedLocal && resolvedLocal !== resolvedGlobal),
+  };
+}
+
 export function resolvePushpopBinaryPath(): string | null {
   if (process.platform === 'win32') {
     const fromWhere =
@@ -54,7 +104,6 @@ function buildHook(event: 'commit' | 'push', projectHookName: 'post-commit' | 'p
   const resolvedBin = resolvePushpopBinaryPath();
   const quotedBin = resolvedBin ? quoteForSh(toHookBinary(resolvedBin)) : null;
   const binExpr = quotedBin ?? 'pushpop';
-  const markerFile = `$HOME/.pushpop/.last-play-${event}`;
 
   return `#!/bin/sh
 # pushpop: play ${event} sound, then chain to project hook
@@ -63,13 +112,7 @@ PUSHPOP_BIN=${binExpr}
 GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 
 if [ -z "$CI" ] && [ "\${npm_command}" != "version" ]; then
-  mkdir -p "$HOME/.pushpop" 2>/dev/null || true
-  last=$(stat -c %Y "${markerFile}" 2>/dev/null || echo 0)
-  now=$(date +%s 2>/dev/null || echo 0)
-  if [ $((now - last)) -ge 2 ]; then
-    touch "${markerFile}" 2>/dev/null || true
-    "$PUSHPOP_BIN" play --event ${event} 2>/dev/null || true
-  fi
+  PUSHPOP_INTERNAL_EVENT=${event} "$PUSHPOP_BIN" 2>/dev/null || true
 fi
 
 if [ -n "$GIT_DIR" ]; then
