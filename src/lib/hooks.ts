@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { HOOKS_DIR, PUSHPOP_DIR } from './config.js';
 
 function readFirstLine(command: string, args: string[]): string | null {
@@ -144,18 +144,19 @@ export function installHooks(): void {
 
 export function setGlobalHooksPath(): void {
   try {
-    const prior = execSync('git config --global --get core.hooksPath', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString()
-      .trim();
+    const prior = execFileSync('git', ['config', '--global', '--get', 'core.hooksPath'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
     const ourPath = HOOKS_DIR.replace(/\\/g, '/');
     if (prior && prior !== ourPath) {
-      execSync(`git config --global pushpop.previousHooksPath "${prior}"`, { stdio: 'pipe' });
+      execFileSync('git', ['config', '--global', 'pushpop.previousHooksPath', prior], { stdio: 'pipe' });
     }
   } catch {
     // no prior value, that's fine
   }
 
-  execSync(`git config --global core.hooksPath "${HOOKS_DIR.replace(/\\/g, '/')}"`, {
+  execFileSync('git', ['config', '--global', 'core.hooksPath', HOOKS_DIR.replace(/\\/g, '/')], {
     stdio: 'pipe',
   });
 }
@@ -163,27 +164,26 @@ export function setGlobalHooksPath(): void {
 export function unsetGlobalHooksPath(): void {
   let prior = '';
   try {
-    prior = execSync('git config --global --get pushpop.previousHooksPath', {
+    prior = execFileSync('git', ['config', '--global', '--get', 'pushpop.previousHooksPath'], {
+      encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .toString()
-      .trim();
+    }).trim();
   } catch {
     // no backup, that's fine
   }
 
   try {
     if (prior) {
-      execSync(`git config --global core.hooksPath "${prior}"`, { stdio: 'pipe' });
+      execFileSync('git', ['config', '--global', 'core.hooksPath', prior], { stdio: 'pipe' });
     } else {
-      execSync('git config --global --unset core.hooksPath', { stdio: 'pipe' });
+      execFileSync('git', ['config', '--global', '--unset', 'core.hooksPath'], { stdio: 'pipe' });
     }
   } catch {
     // already unset, that's fine
   }
 
   try {
-    execSync('git config --global --unset pushpop.previousHooksPath', { stdio: 'pipe' });
+    execFileSync('git', ['config', '--global', '--unset', 'pushpop.previousHooksPath'], { stdio: 'pipe' });
   } catch {
     // nothing to clear
   }

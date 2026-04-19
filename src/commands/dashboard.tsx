@@ -74,7 +74,7 @@ type Screen =
   | { kind: 'main' }
   | { kind: 'sound-source'; event: DashboardEvent }
   | { kind: 'sound-list'; event: DashboardEvent; sourceId: SourceId; activeName?: string }
-  | { kind: 'sound-confirm'; event: DashboardEvent; sourceId: SourceId; sound: SoundRef; previewBusy: boolean; previewLine: string }
+  | { kind: 'sound-confirm'; event: DashboardEvent; sourceId: SourceId; sound: SoundRef; busyAction?: 'preview'; feedbackLine?: string }
   | { kind: 'volume' }
   | { kind: 'upload-method' }
   | { kind: 'upload-picker' }
@@ -417,14 +417,15 @@ function SoundConfirmScreen(props: {
   columns: number;
   flash: FlashMessage | null;
   screen: Extract<Screen, { kind: 'sound-confirm' }>;
-  onPreviewResolved: (line: string) => void;
+  onFeedback: (line: string) => void;
+  onRequestPreview: () => void;
   onAccept: () => void;
   onBack: () => void;
 }) {
-  const { rows, columns, flash, screen, onPreviewResolved, onAccept, onBack } = props;
+  const { rows, columns, flash, screen, onFeedback, onRequestPreview, onAccept, onBack } = props;
 
   useEffect(() => {
-    if (!screen.previewBusy) {
+    if (screen.busyAction !== 'preview') {
       return;
     }
 
@@ -434,7 +435,7 @@ function SoundConfirmScreen(props: {
       try {
         const playback = await playSound(screen.sound, { mode: 'preview' });
         if (!cancelled) {
-          onPreviewResolved(
+          onFeedback(
             playback.started
               ? `  ${purple('♪')}  ${white(`Played: ${screen.sound.name}`)}`
               : `  ${warnColor('Preview unavailable on this system')}`,
@@ -442,7 +443,7 @@ function SoundConfirmScreen(props: {
         }
       } catch {
         if (!cancelled) {
-          onPreviewResolved(`  ${warnColor('Preview unavailable on this system')}`);
+          onFeedback(`  ${warnColor('Preview unavailable on this system')}`);
         }
       }
     };
@@ -451,22 +452,34 @@ function SoundConfirmScreen(props: {
     return () => {
       cancelled = true;
     };
-  }, [screen.previewBusy, screen.sound]);
+  }, [screen.busyAction, screen.sound]);
+
+  const extraLines: string[] = [];
+  if (screen.feedbackLine) {
+    extraLines.push(screen.feedbackLine);
+  }
 
   return (
     <DashboardSelect
-      frame={getFrame(rows, columns, flash, [screen.previewLine])}
-      message={white(`Use "${screen.sound.name}" for ${purple(screen.event)}?`)}
+      frame={getFrame(rows, columns, flash, extraLines)}
+      message={white(`Set "${screen.sound.name}" for ${purple(screen.event)}?`)}
       choices={[
-        { name: white('Yes'), value: true as const },
-        { name: white('No'), value: false as const },
+        { name: `${purple('♪')}  ${white('Play preview')}`, value: 'preview' as const },
+        { name: `${purple('✓')}  ${white('Confirm and set')}`, value: 'confirm' as const },
+        getBackChoice('back' as const),
       ]}
       onSelect={(value) => {
-        if (value) {
-          onAccept();
-        } else {
-          onBack();
+        if (value === 'preview') {
+          onRequestPreview();
+          return;
         }
+
+        if (value === 'confirm') {
+          onAccept();
+          return;
+        }
+
+        onBack();
       }}
       onBack={onBack}
     />
@@ -877,11 +890,6 @@ function DashboardApp() {
               return;
             }
 
-            const resolvedPath = resolveSoundPath(value);
-            const previewLine = resolvedPath
-              ? `  ${purple('♪')}  ${white(`Now playing: ${value.name}`)}`
-              : `  ${dim('(audio file not found)')}`;
-
             setStack((previous) => {
               const top = previous[previous.length - 1];
               if (!top || top.kind !== 'sound-list') {
@@ -896,8 +904,6 @@ function DashboardApp() {
                   event: top.event,
                   sourceId: top.sourceId,
                   sound: value,
-                  previewBusy: Boolean(resolvedPath),
-                  previewLine,
                 },
               ];
             });
@@ -914,8 +920,15 @@ function DashboardApp() {
           columns={columns}
           flash={flash}
           screen={current}
-          onPreviewResolved={(line) => {
-            replaceScreen({ ...current, previewBusy: false, previewLine: line });
+          onFeedback={(line) => {
+            replaceScreen({ ...current, busyAction: undefined, feedbackLine: line });
+          }}
+          onRequestPreview={() => {
+            replaceScreen({
+              ...current,
+              busyAction: 'preview',
+              feedbackLine: `  ${purple('♪')}  ${white(`Now playing: ${current.sound.name}`)}`,
+            });
           }}
           onAccept={() => {
             const { assignments } = getConfig();
