@@ -24,7 +24,8 @@
         { "id": "machine-gun", "name": "Machine Gun", "file": "gaming/machine gun.mp3", "durationSec": 2 },
         { "id": "mario-yapping", "name": "Mario Yapping", "file": "gaming/mario yapping.mp3", "durationSec": 2 },
         { "id": "missile", "name": "Missile", "file": "gaming/missile.mp3", "durationSec": 2 },
-        { "id": "terminated", "name": "Terminated", "file": "gaming/terminated.wav", "durationSec": 2 }
+        { "id": "terminated", "name": "Terminated", "file": "gaming/terminated.wav", "durationSec": 2 },
+        { "id": "yoooshiii", "name": "Yoooshiii", "file": "gaming/yoooshiii.mp3", "durationSec": 2 }
       ]
     },
     {
@@ -51,13 +52,13 @@
       "label": "Producer Tags",
       "symbol": "♫",
       "sounds": [
-        { "id": "808-mafia", "name": "808 Mafia", "file": "producer tags/808 Mafia.mp3", "durationSec": 2 },
-        { "id": "big-khaled-1", "name": "Big Khaled 1", "file": "producer tags/Big Khaled 1.mp3", "durationSec": 2 },
-        { "id": "big-khaled-2", "name": "Big Khaled 2", "file": "producer tags/Big Khaled 2.mp3", "durationSec": 2 },
-        { "id": "big-ms", "name": "BIG Ms", "file": "producer tags/BIG Ms.mp3", "durationSec": 2 },
-        { "id": "mike-will-made-it", "name": "Mike Will Made It", "file": "producer tags/Mike Will Made It.mp3", "durationSec": 2 },
-        { "id": "wake-up-filthy", "name": "Wake Up Filthy", "file": "producer tags/Wake Up Filthy.mp3", "durationSec": 2 },
-        { "id": "yo-pierre", "name": "Yo Pierre", "file": "producer tags/Yo Pierre.mp3", "durationSec": 2 }
+        { "id": "808-mamamia", "name": "808 Mamamia", "file": "producer tags/808 mamamia.wav", "durationSec": 2 },
+        { "id": "big-khaled-1", "name": "Big Khaled 1", "file": "producer tags/big khaled 1.mp3", "durationSec": 2 },
+        { "id": "big-khaled-2", "name": "Big Khaled 2", "file": "producer tags/big khaled 2.mp3", "durationSec": 2 },
+        { "id": "big-ms", "name": "BIG M's", "file": "producer tags/BIG M's.wav", "durationSec": 2 },
+        { "id": "mike-will", "name": "Mike Will May Have Made It", "file": "producer tags/mike will may have made it.wav", "durationSec": 2 },
+        { "id": "pierre", "name": "Pierre", "file": "producer tags/pierre.wav", "durationSec": 2 },
+        { "id": "wake-up-clean", "name": "Wake Up Clean", "file": "producer tags/wake up clean.wav", "durationSec": 2 }
       ]
     }
   ]
