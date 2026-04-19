@@ -55,17 +55,17 @@ export function banner(version: string): string {
     cachedBannerKey = cacheKey;
     return cachedBanner;
   }
-  // Mascot frame: each line is kept to a compact fixed width so the right-hand
-  // decorations line up with the left. Musical-note glyphs (♫ ♪ ♬) render
-  // as single-cell in every modern terminal we target (Windows Terminal,
-  // Terminal.app, iTerm2, VS Code), so plain character counting works.
+  // Mascot: tiny face in a rounded “screen”, blocky earcups + headband as
+  // headphones, ♩/♫/♬ clusters at the sides so notes read as coming from the
+  // cups. Same fixed width per line; glyphs are single-cell in the terminals
+  // we target (Windows Terminal, Terminal.app, iTerm2, VS Code).
   const mascot = [
-    '♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪ ♬ ♫ ♪',
-    '♪    ▐██▌╭───────╮▐██▌    ♪',
-    '♫     ▗▄███████████▄▖     ♫',
-    '♪     ▐█   ◕ ‿ ◕   █▌     ♪',
-    '♫     ▝▀███████████▀▘     ♫',
-    '♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫ ♬ ♪ ♫',
+    '♬ ♩ ♪ ♫ ♬                         ♪ ♫ ♬ ♩ ♪',
+    '♩ ♪ ♫       ╭─────────────────╮       ♫ ♪ ♩',
+    '♫ ♬ ♪     ▐█▌ ╭─────────────╮ ▐█▌     ♪ ♫ ♬',
+    '♪ ♩ ♫     ▐█▌      ◕ ‿ ◕      ▐█▌     ♬ ♪ ♩',
+    '♫ ♬ ♪      ▝▀▀╰─────────────╯▀▀▘      ♩ ♫ ♬',
+    '♩ ♪ ♫ ♬ ♪     ♫ ♬ ♩ ♪     ♬ ♫ ♪ ♩ ♬ ♪     ♫',
   ].join('\n');
 
   cachedBanner = [

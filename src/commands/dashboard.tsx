@@ -1,7 +1,7 @@
 import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import { render, useApp } from 'ink';
 import { useEffect, useState } from 'react';
 import {
@@ -61,6 +61,11 @@ interface SoundItem {
   durationSec?: number;
 }
 
+interface FilePickerRequest {
+  wait: Promise<string | null>;
+  cancel: () => void;
+}
+
 type Screen =
   | { kind: 'init-missing' }
   | { kind: 'init-running' }
@@ -92,55 +97,72 @@ function hasNativeFilePicker(): boolean {
   return process.platform === 'win32' || process.platform === 'darwin';
 }
 
-function openFilePicker(): string | null {
-  try {
-    if (process.platform === 'win32') {
-      const script = [
-        'Add-Type -AssemblyName System.Windows.Forms;',
-        'Add-Type -AssemblyName System.Drawing;',
-        '[System.Windows.Forms.Application]::EnableVisualStyles();',
-        '$owner = New-Object System.Windows.Forms.Form;',
-        '$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual;',
-        '$owner.Location = New-Object System.Drawing.Point(-32000, -32000);',
-        '$owner.Size = New-Object System.Drawing.Size(1, 1);',
-        '$owner.ShowInTaskbar = $false;',
-        '$owner.TopMost = $true;',
-        '$owner.Opacity = 0;',
-        '$owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedToolWindow;',
-        '$dialog = New-Object System.Windows.Forms.OpenFileDialog;',
-        '$dialog.Filter = "Audio files (*.mp3;*.wav;*.m4a)|*.mp3;*.wav;*.m4a";',
-        '$dialog.Title = "Select audio file for pushpop";',
-        'try {',
-        '  $null = $owner.Show();',
-        '  $owner.BringToFront();',
-        '  $owner.Activate();',
-        '  if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
-        '} finally {',
-        '  $dialog.Dispose();',
-        '  $owner.Close();',
-        '  $owner.Dispose();',
-        '}',
-      ].join(' ');
-      const result = execFileSync('powershell', ['-NoProfile', '-Command', script], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      return result.trim() || null;
-    }
-
-    if (process.platform === 'darwin') {
-      const result = execFileSync(
-        'osascript',
-        ['-e', 'POSIX path of (choose file of type {"public.audio"} with prompt "Select audio file for pushpop")'],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-      );
-      return result.trim() || null;
-    }
-  } catch {
-    // User cancelled or dialog unavailable.
+function openFilePicker(): FilePickerRequest {
+  if (!hasNativeFilePicker()) {
+    return {
+      wait: Promise.resolve(null),
+      cancel: () => undefined,
+    };
   }
 
-  return null;
+  const command = process.platform === 'win32' ? 'powershell.exe' : 'osascript';
+  const args = process.platform === 'win32'
+    ? [
+        '-NoProfile',
+        '-STA',
+        '-Command',
+        [
+          'Add-Type -AssemblyName System.Windows.Forms;',
+          '[System.Windows.Forms.Application]::EnableVisualStyles();',
+          '$dialog = New-Object System.Windows.Forms.OpenFileDialog;',
+          '$dialog.Filter = "Audio files (*.mp3;*.wav;*.m4a)|*.mp3;*.wav;*.m4a";',
+          '$dialog.Title = "Select audio file for pushpop";',
+          '$dialog.Multiselect = $false;',
+          '$dialog.RestoreDirectory = $true;',
+          'try {',
+          '  if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
+          '} finally {',
+          '  $dialog.Dispose();',
+          '}',
+        ].join(' '),
+      ]
+    : ['-e', 'POSIX path of (choose file of type {"public.audio"} with prompt "Select audio file for pushpop")'];
+
+  let settled = false;
+  let resolveWait: (value: string | null) => void = () => undefined;
+  const wait = new Promise<string | null>((resolve) => {
+    resolveWait = resolve;
+  });
+
+  const finish = (value: string | null) => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    resolveWait(value);
+  };
+
+  const child = execFile(command, args, { encoding: 'utf8', windowsHide: true }, (error, stdout) => {
+    if (error) {
+      finish(null);
+      return;
+    }
+
+    finish(stdout.trim() || null);
+  });
+
+  child.on('error', () => finish(null));
+
+  return {
+    wait,
+    cancel: () => {
+      if (!settled) {
+        child.kill();
+        finish(null);
+      }
+    },
+  };
 }
 
 function hooksInstalled(): boolean {
@@ -429,11 +451,24 @@ function UploadPickerScreen(props: {
   rows: number;
   flash: FlashMessage | null;
   onResolved: (filePath: string | null) => void;
+  onCancel: () => void;
 }) {
-  const { rows, flash, onResolved } = props;
+  const { rows, flash, onResolved, onCancel } = props;
 
   useEffect(() => {
-    onResolved(openFilePicker());
+    let cancelled = false;
+    const request = openFilePicker();
+
+    void request.wait.then((filePath) => {
+      if (!cancelled) {
+        onResolved(filePath);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      request.cancel();
+    };
   }, []);
 
   return (
@@ -442,6 +477,7 @@ function UploadPickerScreen(props: {
       message={white('Opening native file picker…')}
       lines={[`  ${dim('Choose an audio file to upload to pushpop.')}`]}
       footer={dim('Waiting for file selection…')}
+      onBack={onCancel}
     />
   );
 }
@@ -932,6 +968,10 @@ function DashboardApp() {
             }
 
             replaceScreen({ kind: 'upload-preparing', filePath });
+          }}
+          onCancel={() => {
+            showFlash('info', 'File picker cancelled.');
+            goBack();
           }}
         />
       );

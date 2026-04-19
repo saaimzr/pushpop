@@ -35,10 +35,13 @@ interface DashboardViewProps {
   message: string;
   lines?: string[];
   footer?: string;
+  onBack?: () => void;
+  helpText?: string;
 }
 
 const SELECT_HELP = '← back  ↑↓ navigate  → or Enter select';
-const INPUT_HELP = 'Esc or Left back  Type to edit  Enter submit';
+const INPUT_HELP = 'Esc back  Left/Right move  Home/End jump  Enter submit';
+const VIEW_HELP = 'Esc cancel';
 
 function countLines(value?: string): number {
   return value ? value.split('\n').length : 0;
@@ -186,11 +189,13 @@ export function DashboardInput({
   validate,
 }: DashboardInputProps) {
   const [value, setValue] = useState(defaultValue);
+  const [cursor, setCursor] = useState(defaultValue.length);
   const [error, setError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setValue(defaultValue);
+    setCursor(defaultValue.length);
   }, [defaultValue]);
 
   useInput(async (input, key) => {
@@ -198,8 +203,28 @@ export function DashboardInput({
       return;
     }
 
-    if ((key.escape || key.leftArrow) && onBack) {
+    if (key.escape && onBack) {
       onBack();
+      return;
+    }
+
+    if (key.leftArrow) {
+      setCursor((current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (key.rightArrow) {
+      setCursor((current) => Math.min(value.length, current + 1));
+      return;
+    }
+
+    if (key.home) {
+      setCursor(0);
+      return;
+    }
+
+    if (key.end) {
+      setCursor(value.length);
       return;
     }
 
@@ -224,8 +249,23 @@ export function DashboardInput({
       return;
     }
 
-    if (key.backspace || key.delete) {
-      setValue((current) => current.slice(0, -1));
+    if (key.backspace) {
+      if (cursor === 0) {
+        return;
+      }
+
+      setValue((current) => `${current.slice(0, cursor - 1)}${current.slice(cursor)}`);
+      setCursor((current) => Math.max(0, current - 1));
+      setError(undefined);
+      return;
+    }
+
+    if (key.delete) {
+      if (cursor >= value.length) {
+        return;
+      }
+
+      setValue((current) => `${current.slice(0, cursor)}${current.slice(cursor + 1)}`);
       setError(undefined);
       return;
     }
@@ -235,12 +275,15 @@ export function DashboardInput({
     }
 
     if (input.length > 0) {
-      setValue((current) => current + input);
+      setValue((current) => `${current.slice(0, cursor)}${input}${current.slice(cursor)}`);
+      setCursor((current) => current + input.length);
       setError(undefined);
     }
   });
 
-  const promptValue = value.length > 0 ? value : (placeholder ? dim(placeholder) : '');
+  const promptValue = value.length > 0
+    ? `${value.slice(0, cursor)}${purple('▌')}${value.slice(cursor)}`
+    : `${purple('▌')}${placeholder ? placeholder : ''}`;
   const footer = submitting ? pendingMessage : dim(helpText);
 
   return (
@@ -252,10 +295,23 @@ export function DashboardInput({
   );
 }
 
-export function DashboardView({ frame, message, lines = [], footer }: DashboardViewProps) {
+export function DashboardView({
+  frame,
+  message,
+  lines = [],
+  footer,
+  onBack,
+  helpText = VIEW_HELP,
+}: DashboardViewProps) {
+  useInput((_, key) => {
+    if (key.escape && onBack) {
+      onBack();
+    }
+  });
+
   return (
     <Text>
-      {[frame, message, ...lines, footer]
+      {[frame, message, ...lines, footer, onBack ? dim(helpText) : undefined]
         .filter((line) => typeof line === 'string' && line.length > 0)
         .join('\n')}
     </Text>
