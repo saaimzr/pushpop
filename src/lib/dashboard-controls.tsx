@@ -70,6 +70,25 @@ export function useTerminalRows(): number {
   return rows;
 }
 
+export function useTerminalColumns(): number {
+  const { stdout } = useStdout();
+  const [columns, setColumns] = useState(stdout.columns ?? process.stdout.columns ?? 80);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setColumns(stdout.columns ?? process.stdout.columns ?? 80);
+    };
+
+    handleResize();
+    stdout.on('resize', handleResize);
+    return () => {
+      stdout.removeListener('resize', handleResize);
+    };
+  }, [stdout]);
+
+  return columns;
+}
+
 export function DashboardSelect<T>({
   frame,
   message,

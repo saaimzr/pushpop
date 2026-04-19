@@ -19,6 +19,7 @@ import {
   DashboardSelect,
   DashboardView,
   type DashboardChoice,
+  useTerminalColumns,
   useTerminalRows,
 } from '../lib/dashboard-controls.js';
 import { banner, dim, purple, statusPanel, warnColor, white } from '../lib/ui.js';
@@ -112,7 +113,21 @@ function openFilePicker(): FilePickerRequest {
         '-STA',
         '-Command',
         [
+          // Load WinForms and bring the dialog to the foreground of the calling terminal.
+          // Without this, the OpenFileDialog spawns behind the active terminal window on
+          // single-monitor setups and the user has to Alt+Tab to find it.
           'Add-Type -AssemblyName System.Windows.Forms;',
+          'Add-Type -AssemblyName System.Runtime.InteropServices;',
+          'Add-Type @"',
+          'using System;',
+          'using System.Runtime.InteropServices;',
+          'public class FocusHelper {',
+          '  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);',
+          '  [DllImport("user32.dll")] public static extern IntPtr GetConsoleWindow();',
+          '}',
+          '"@;',
+          // Bring the calling console window to foreground first, then show the dialog.
+          '[FocusHelper]::SetForegroundWindow([FocusHelper]::GetConsoleWindow()) | Out-Null;',
           '[System.Windows.Forms.Application]::EnableVisualStyles();',
           '$dialog = New-Object System.Windows.Forms.OpenFileDialog;',
           '$dialog.Filter = "Audio files (*.mp3;*.wav;*.m4a)|*.mp3;*.wav;*.m4a";',
@@ -143,7 +158,9 @@ function openFilePicker(): FilePickerRequest {
     resolveWait(value);
   };
 
-  const child = execFile(command, args, { encoding: 'utf8', windowsHide: true }, (error, stdout) => {
+  // Do NOT pass windowsHide:true — hiding the child process console window can
+  // prevent the OpenFileDialog from receiving foreground activation on Windows.
+  const child = execFile(command, args, { encoding: 'utf8' }, (error, stdout) => {
     if (error) {
       finish(null);
       return;
@@ -250,8 +267,19 @@ function formatFlashLine(flash: FlashMessage | null): string | undefined {
   return `  ${purple('♪')}  ${white(flash.message)}`;
 }
 
-function getFrame(rows: number, flash: FlashMessage | null, extraLines: string[] = []): string {
-  const parts = [rows < 18 ? compactStatusPanel() : statusPanel(getStatusLines())];
+function getFrame(rows: number, columns: number, flash: FlashMessage | null, extraLines: string[] = []): string {
+  const parts: string[] = [];
+
+  // Render the banner inside Ink so it lives in the managed viewport and
+  // recovers automatically when the terminal is widened back after being
+  // collapsed. Only show it when there is enough vertical space (rows >= 18)
+  // AND enough horizontal space (the banner needs ~50 columns).
+  if (rows >= 18 && columns >= 50) {
+    parts.push(banner(version, columns), '');
+  }
+
+  parts.push(rows < 18 ? compactStatusPanel() : statusPanel(getStatusLines()));
+
   const flashLine = formatFlashLine(flash);
   const bodyLines = flashLine ? [flashLine, ...extraLines] : extraLines;
 
@@ -363,11 +391,12 @@ function buildUploadSummaryLines(session: PreparedUploadSession, feedbackLine?: 
 
 function InitRunningScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   onFinished: (notes: InitNote[]) => void;
   onError: (message: string) => void;
 }) {
-  const { rows, flash, onFinished, onError } = props;
+  const { rows, columns, flash, onFinished, onError } = props;
 
   useEffect(() => {
     try {
@@ -379,7 +408,7 @@ function InitRunningScreen(props: {
 
   return (
     <DashboardView
-      frame={getFrame(rows, flash)}
+      frame={getFrame(rows, columns, flash)}
       message={white('Setting up pushpop…')}
       lines={[`  ${dim('Installing hooks and configuring global Git hooksPath…')}`]}
       footer={dim('Please wait…')}
@@ -389,13 +418,14 @@ function InitRunningScreen(props: {
 
 function SoundConfirmScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   screen: Extract<Screen, { kind: 'sound-confirm' }>;
   onPreviewResolved: (line: string) => void;
   onAccept: () => void;
   onBack: () => void;
 }) {
-  const { rows, flash, screen, onPreviewResolved, onAccept, onBack } = props;
+  const { rows, columns, flash, screen, onPreviewResolved, onAccept, onBack } = props;
 
   useEffect(() => {
     if (!screen.previewBusy) {
@@ -429,7 +459,7 @@ function SoundConfirmScreen(props: {
 
   return (
     <DashboardSelect
-      frame={getFrame(rows, flash, [screen.previewLine])}
+      frame={getFrame(rows, columns, flash, [screen.previewLine])}
       message={white(`Use "${screen.sound.name}" for ${purple(screen.event)}?`)}
       choices={[
         { name: white('Yes'), value: true as const },
@@ -449,11 +479,12 @@ function SoundConfirmScreen(props: {
 
 function UploadPickerScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   onResolved: (filePath: string | null) => void;
   onCancel: () => void;
 }) {
-  const { rows, flash, onResolved, onCancel } = props;
+  const { rows, columns, flash, onResolved, onCancel } = props;
 
   useEffect(() => {
     let cancelled = false;
@@ -473,7 +504,7 @@ function UploadPickerScreen(props: {
 
   return (
     <DashboardView
-      frame={getFrame(rows, flash, getAddCustomLines())}
+      frame={getFrame(rows, columns, flash, getAddCustomLines())}
       message={white('Opening native file picker…')}
       lines={[`  ${dim('Choose an audio file to upload to pushpop.')}`]}
       footer={dim('Waiting for file selection…')}
@@ -484,12 +515,13 @@ function UploadPickerScreen(props: {
 
 function UploadPreparingScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   filePath: string;
   onPrepared: (session: PreparedUploadSession) => void;
   onError: (message: string) => void;
 }) {
-  const { rows, flash, filePath, onPrepared, onError } = props;
+  const { rows, columns, flash, filePath, onPrepared, onError } = props;
 
   useEffect(() => {
     let cancelled = false;
@@ -515,7 +547,7 @@ function UploadPreparingScreen(props: {
 
   return (
     <DashboardView
-      frame={getFrame(rows, flash, getAddCustomLines())}
+      frame={getFrame(rows, columns, flash, getAddCustomLines())}
       message={white('Preparing upload…')}
       lines={[`  ${dim(filePath)}`]}
       footer={dim('Reading audio file and trimming if needed…')}
@@ -525,6 +557,7 @@ function UploadPreparingScreen(props: {
 
 function UploadConfirmScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   screen: Extract<Screen, { kind: 'upload-confirm' }>;
   onFeedback: (line: string) => void;
@@ -533,7 +566,7 @@ function UploadConfirmScreen(props: {
   onSaved: (session: PreparedUploadSession) => void;
   onBack: () => void;
 }) {
-  const { rows, flash, screen, onFeedback, onRequestPreview, onRequestSave, onSaved, onBack } = props;
+  const { rows, columns, flash, screen, onFeedback, onRequestPreview, onRequestSave, onSaved, onBack } = props;
 
   useEffect(() => {
     if (!screen.busyAction) {
@@ -582,7 +615,7 @@ function UploadConfirmScreen(props: {
 
   return (
     <DashboardSelect
-      frame={getFrame(rows, flash, buildUploadSummaryLines(screen.session, screen.feedbackLine))}
+      frame={getFrame(rows, columns, flash, buildUploadSummaryLines(screen.session, screen.feedbackLine))}
       message={white('Choose an action:')}
       choices={[
         { name: `${purple('♪')}  ${white('Play preview')}`, value: 'preview' as const },
@@ -609,10 +642,11 @@ function UploadConfirmScreen(props: {
 
 function UninstallRunningScreen(props: {
   rows: number;
+  columns: number;
   flash: FlashMessage | null;
   onFinished: (result: UninstallResult) => void;
 }) {
-  const { rows, flash, onFinished } = props;
+  const { rows, columns, flash, onFinished } = props;
 
   useEffect(() => {
     onFinished(performUninstall());
@@ -620,7 +654,7 @@ function UninstallRunningScreen(props: {
 
   return (
     <DashboardView
-      frame={getFrame(rows, flash)}
+      frame={getFrame(rows, columns, flash)}
       message={white('Uninstalling pushpop…')}
       lines={[`  ${dim('Removing hooks, config, and scheduling CLI cleanup…')}`]}
       footer={dim('Please wait…')}
@@ -631,6 +665,7 @@ function UninstallRunningScreen(props: {
 function DashboardApp() {
   const { exit } = useApp();
   const rows = useTerminalRows();
+  const columns = useTerminalColumns();
   const [stack, setStack] = useState<Screen[]>([{ kind: hooksInstalled() ? 'main' : 'init-missing' }]);
   const [flash, setFlash] = useState<FlashMessage | null>(null);
   const current = stack[stack.length - 1];
@@ -668,7 +703,7 @@ function DashboardApp() {
     case 'init-missing':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [
+          frame={getFrame(rows, columns, flash, [
             `  ${warnColor('pushpop is not set up on this machine yet.')}`,
             `  ${dim('Hooks are missing — sounds will not play on git commit/push.')}`,
           ])}
@@ -693,6 +728,7 @@ function DashboardApp() {
       return (
         <InitRunningScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           onFinished={(notes) => {
             replaceScreen({ kind: 'init-result', notes });
@@ -707,7 +743,7 @@ function DashboardApp() {
     case 'init-result':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, current.notes.map(formatInitNote))}
+          frame={getFrame(rows, columns, flash, current.notes.map(formatInitNote))}
           message={white('Setup complete')}
           choices={[{ name: white('Continue'), value: 'continue' as const }]}
           onSelect={() => resetToHome()}
@@ -731,7 +767,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash)}
+          frame={getFrame(rows, columns, flash)}
           message={white('What do you want to do?')}
           choices={choices}
           maxPageSize={11}
@@ -792,7 +828,7 @@ function DashboardApp() {
     case 'sound-source':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash)}
+          frame={getFrame(rows, columns, flash)}
           message={white(`Choose a sound source for ${purple(current.event)}:`)}
           choices={getSourceChoices(current.event)}
           maxPageSize={12}
@@ -831,7 +867,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash)}
+          frame={getFrame(rows, columns, flash)}
           message={white('Choose a sound:')}
           choices={choices}
           maxPageSize={10}
@@ -879,6 +915,7 @@ function DashboardApp() {
       return (
         <SoundConfirmScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           screen={current}
           onPreviewResolved={(line) => {
@@ -903,7 +940,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash)}
+          frame={getFrame(rows, columns, flash)}
           message={white('Choose a volume level:')}
           choices={[...choices, getBackChoice(-1)]}
           initialIndex={Math.max(0, choices.findIndex((choice) => choice.value === currentVolume))}
@@ -934,7 +971,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, getAddCustomLines())}
+          frame={getFrame(rows, columns, flash, getAddCustomLines())}
           message={white('How do you want to add a sound?')}
           choices={choices}
           onSelect={(value) => {
@@ -959,6 +996,7 @@ function DashboardApp() {
       return (
         <UploadPickerScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           onResolved={(filePath) => {
             if (!filePath) {
@@ -979,7 +1017,7 @@ function DashboardApp() {
     case 'upload-manual':
       return (
         <DashboardInput
-          frame={getFrame(rows, flash, getAddCustomLines())}
+          frame={getFrame(rows, columns, flash, getAddCustomLines())}
           message={white('Path to your audio file (.mp3 / .wav / .m4a):')}
           defaultValue={current.defaultValue ?? ''}
           placeholder={dim('Paste or type a file path')}
@@ -995,6 +1033,7 @@ function DashboardApp() {
       return (
         <UploadPreparingScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           filePath={current.filePath}
           onPrepared={(session) => {
@@ -1010,6 +1049,7 @@ function DashboardApp() {
       return (
         <UploadConfirmScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           screen={current}
           onFeedback={(line) => {
@@ -1064,7 +1104,7 @@ function DashboardApp() {
     case 'upload-error':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [...getAddCustomLines(), '', `  ${warnColor(current.message)}`])}
+          frame={getFrame(rows, columns, flash, [...getAddCustomLines(), '', `  ${warnColor(current.message)}`])}
           message={white('Upload could not be prepared')}
           choices={[
             { name: white('Try again'), value: 'retry' as const },
@@ -1089,7 +1129,7 @@ function DashboardApp() {
     case 'upload-limit':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, current.lines)}
+          frame={getFrame(rows, columns, flash, current.lines)}
           message={white('Upload limit reached')}
           choices={[{ name: white('Return'), value: 'return' as const }]}
           onSelect={() => resetToHome()}
@@ -1113,7 +1153,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, extraLines)}
+          frame={getFrame(rows, columns, flash, extraLines)}
           message={white('Choose a custom sound to delete:')}
           choices={choices}
           initialIndex={getInitialChoiceIndex(choices, current.activeFile)}
@@ -1147,7 +1187,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [
+          frame={getFrame(rows, columns, flash, [
             `  ${warnColor(`Delete "${soundName}"?`)}`,
             `  ${dim('This removes the file and clears any commit/push assignment using it.')}`,
           ])}
@@ -1182,7 +1222,7 @@ function DashboardApp() {
     case 'help':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [
+          frame={getFrame(rows, columns, flash, [
             `  ${white('pushpop plays short audio tags when you git commit and git push.')}`,
             '',
             `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
@@ -1203,7 +1243,7 @@ function DashboardApp() {
     case 'feedback':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [
+          frame={getFrame(rows, columns, flash, [
             `  ${purple('✉')}  ${white('Share feedback')}`,
             '',
             `        ${purple(FEEDBACK_EMAIL)}`,
@@ -1220,7 +1260,7 @@ function DashboardApp() {
     case 'activate':
       return (
         <DashboardInput
-          frame={getFrame(rows, flash)}
+          frame={getFrame(rows, columns, flash)}
           message={white('Enter your Polar license key:')}
           defaultValue={current.defaultValue ?? ''}
           pendingMessage={dim('Validating license key…')}
@@ -1242,7 +1282,7 @@ function DashboardApp() {
     case 'uninstall-confirm':
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, [
+          frame={getFrame(rows, columns, flash, [
             `  ${warnColor('This removes hooks, config, and attempts to remove the global CLI.')}`,
           ])}
           message={white('Uninstall pushpop?')}
@@ -1266,6 +1306,7 @@ function DashboardApp() {
       return (
         <UninstallRunningScreen
           rows={rows}
+          columns={columns}
           flash={flash}
           onFinished={(result) => {
             replaceScreen({ kind: 'uninstall-result', result });
@@ -1287,7 +1328,7 @@ function DashboardApp() {
 
       return (
         <DashboardSelect
-          frame={getFrame(rows, flash, lines)}
+          frame={getFrame(rows, columns, flash, lines)}
           message={white('Uninstall complete')}
           choices={[{ name: white('Exit pushpop'), value: 'exit' as const }]}
           onSelect={() => exit()}
@@ -1302,8 +1343,9 @@ function DashboardApp() {
 }
 
 export async function runDashboard(): Promise<void> {
-  console.log('');
-  console.log(banner(version));
+  // The banner is now rendered inside the Ink component tree (via getFrame)
+  // so it redraws reactively on terminal resize. We no longer print it here
+  // to avoid a duplicate static copy in the scrollback.
   console.log('');
 
   const instance = render(<DashboardApp />, {

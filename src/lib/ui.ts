@@ -24,7 +24,7 @@ export function clearScreen(): void {
 export function exitClean(code = 0): never {
   try {
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
-  } catch {}
+  } catch { }
   process.stdout.write('\x1B[?25h\n');
   process.exit(code);
 }
@@ -42,8 +42,9 @@ const SOLID_LETTERS: Record<string, string[]> = {
 
 const SOLID_TITLE = buildSolidTitle('pushpop');
 
-export function banner(version: string): string {
-  const title = resolveBannerTitle(process.stdout.columns ?? 80);
+export function banner(version: string, columns?: number): string {
+  const cols = columns ?? process.stdout.columns ?? 80;
+  const title = resolveBannerTitle(cols);
   const cacheKey = `${version}:${title === null ? 'narrow' : 'full'}`;
 
   if (cachedBanner !== null && cachedBannerKey === cacheKey) {
@@ -60,12 +61,12 @@ export function banner(version: string): string {
   // cups. Same fixed width per line; glyphs are single-cell in the terminals
   // we target (Windows Terminal, Terminal.app, iTerm2, VS Code).
   const mascot = [
-    '♬ ♩ ♪ ♫ ♬                         ♪ ♫ ♬ ♩ ♪',
+    '♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♪ ♫ ♬ ♪ ♫ ♬ ♪',
     '♩ ♪ ♫       ╭─────────────────╮       ♫ ♪ ♩',
     '♫ ♬ ♪     ▐█▌ ╭─────────────╮ ▐█▌     ♪ ♫ ♬',
     '♪ ♩ ♫     ▐█▌      ◕ ‿ ◕      ▐█▌     ♬ ♪ ♩',
-    '♫ ♬ ♪      ▝▀▀╰─────────────╯▀▀▘      ♩ ♫ ♬',
-    '♩ ♪ ♫ ♬ ♪     ♫ ♬ ♩ ♪     ♬ ♫ ♪ ♩ ♬ ♪     ♫',
+    '♫ ♬ ♪      ▝  ╰─────────────╯  ▘      ♩ ♫ ♬',
+    '♩ ♪ ♫ ♬ ♪ ♫ ♬ ♩ ♫ ♬ ♩ ♪ ♬ ♫ ♪ ♩ ♬ ♪ ♫ ♬ ♩ ♫',
   ].join('\n');
 
   cachedBanner = [
