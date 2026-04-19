@@ -68,6 +68,14 @@ Pushpop ships with built-in sounds across 5 genres:
   
 ---
 
+## Platform Support
+
+**macOS** via `afplay` · **Windows** via WMP COM / `ffplay` / PowerShell fallback chain. Requires a modern terminal (Windows Terminal, Terminal.app, iTerm2, VS Code).
+
+## Uploads
+
+Upload `.mp3`, `.wav`, or `.m4a` files from the dashboard. Tags are capped at **5.5 s** — longer files are auto-trimmed when `ffmpeg` is installed. Preview before saving.
+
 ## Free vs Pro
 
 
@@ -84,16 +92,7 @@ Once you have a key:
 
 ```bash
 pushpop activate YOUR-LICENSE-KEY
-
 ```
-
-## Platform Support
-
-**macOS** via `afplay` · **Windows** via WMP COM / `ffplay` / PowerShell fallback chain. Requires a modern terminal (Windows Terminal, Terminal.app, iTerm2, VS Code).
-
-## Uploads
-
-Upload `.mp3`, `.wav`, or `.m4a` files from the dashboard. Tags are capped at **5.5 s** — longer files are auto-trimmed when `ffmpeg` is installed. Preview before saving.
 
 
 ## How It Works
