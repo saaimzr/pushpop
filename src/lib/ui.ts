@@ -61,7 +61,7 @@ export function banner(version: string, columns?: number): string {
   // cups. Same fixed width per line; glyphs are single-cell in the terminals
   // we target (Windows Terminal, Terminal.app, iTerm2, VS Code).
   const mascot = [
-    '♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♪ ♫ ♬ ♪ ♫ ♬ ♪',
+    '♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♬ ♩ ♪ ♫ ♪ ♫ ♬ ♪ ♫ ♬ ',
     '♩ ♪ ♫       ╭─────────────────╮       ♫ ♪ ♩',
     '♫ ♬ ♪     ▐█▌ ╭─────────────╮ ▐█▌     ♪ ♫ ♬',
     '♪ ♩ ♫     ▐█▌      ◕ ‿ ◕      ▐█▌     ♬ ♪ ♩',

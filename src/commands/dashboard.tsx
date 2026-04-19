@@ -113,21 +113,17 @@ function openFilePicker(): FilePickerRequest {
         '-STA',
         '-Command',
         [
-          // Load WinForms and bring the dialog to the foreground of the calling terminal.
-          // Without this, the OpenFileDialog spawns behind the active terminal window on
+          // Load WinForms and P/Invoke SetForegroundWindow to bring the dialog
+          // to the foreground of the calling terminal. Without this, the
+          // OpenFileDialog spawns behind the active terminal window on
           // single-monitor setups and the user has to Alt+Tab to find it.
+          //
+          // We use -MemberDefinition with a regular string (not a here-string)
+          // because the entire command is joined into one line.
           'Add-Type -AssemblyName System.Windows.Forms;',
-          'Add-Type -AssemblyName System.Runtime.InteropServices;',
-          'Add-Type @"',
-          'using System;',
-          'using System.Runtime.InteropServices;',
-          'public class FocusHelper {',
-          '  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);',
-          '  [DllImport("user32.dll")] public static extern IntPtr GetConsoleWindow();',
-          '}',
-          '"@;',
-          // Bring the calling console window to foreground first, then show the dialog.
-          '[FocusHelper]::SetForegroundWindow([FocusHelper]::GetConsoleWindow()) | Out-Null;',
+          `Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern IntPtr GetConsoleWindow();' -Name NativeMethods -Namespace Win32;`,
+          // Bring this process to the foreground so the dialog appears on top.
+          '[Win32.NativeMethods]::SetForegroundWindow([Win32.NativeMethods]::GetConsoleWindow()) | Out-Null;',
           '[System.Windows.Forms.Application]::EnableVisualStyles();',
           '$dialog = New-Object System.Windows.Forms.OpenFileDialog;',
           '$dialog.Filter = "Audio files (*.mp3;*.wav;*.m4a)|*.mp3;*.wav;*.m4a";',
