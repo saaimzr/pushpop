@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync, spawn } from 'child_process';
-//rip it killed itselff
+//rip it killed itselfff
 const PACKAGE_NAME = 'pushpopper';
 const MANUAL_COMMAND = `npm uninstall -g ${PACKAGE_NAME}`;
 
@@ -101,14 +101,14 @@ export function scheduleSelfUninstall(): SelfUninstallResult {
 
     const child = isWindows
       ? spawn('cmd.exe', ['/c', 'start', '""', '/min', scriptPath], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: true,
-        })
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      })
       : spawn('sh', [scriptPath], {
-          detached: true,
-          stdio: 'ignore',
-        });
+        detached: true,
+        stdio: 'ignore',
+      });
 
     child.unref();
     result.spawned = true;
