@@ -13,7 +13,6 @@ import {
 } from '../lib/config.js';
 import { getAllGenres, getCustomSounds, getSoundsForGenre } from '../lib/sounds.js';
 import { playSound, resolveSoundPath } from '../lib/audio.js';
-import { normalizeWrappedInput } from '../lib/input.js';
 import {
   FEEDBACK_EMAIL,
   FREE_TIER_LIMIT,
@@ -30,9 +29,8 @@ import {
   dim,
   warnColor,
 } from '../lib/ui.js';
-import { navSelect, navInput, NAV_BACK } from '../lib/nav-select.js';
+import { navSelect, NAV_BACK } from '../lib/nav-select.js';
 import { runUpload } from './upload.js';
-import { runActivate } from './activate.js';
 import { runUninstall } from './uninstall.js';
 import type { SoundRef } from '../lib/config.js';
 
@@ -145,10 +143,29 @@ function openFilePicker(): string | null {
     if (process.platform === 'win32') {
       const script = [
         'Add-Type -AssemblyName System.Windows.Forms;',
+        'Add-Type -AssemblyName System.Drawing;',
+        '[System.Windows.Forms.Application]::EnableVisualStyles();',
+        '$owner = New-Object System.Windows.Forms.Form;',
+        '$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual;',
+        '$owner.Location = New-Object System.Drawing.Point(-32000, -32000);',
+        '$owner.Size = New-Object System.Drawing.Size(1, 1);',
+        '$owner.ShowInTaskbar = $false;',
+        '$owner.TopMost = $true;',
+        '$owner.Opacity = 0;',
+        '$owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedToolWindow;',
         '$d = New-Object System.Windows.Forms.OpenFileDialog;',
         '$d.Filter = "Audio files (*.mp3;*.wav;*.m4a)|*.mp3;*.wav;*.m4a";',
         '$d.Title = "Select audio file for pushpop";',
-        'if ($d.ShowDialog() -eq "OK") { Write-Output $d.FileName }',
+        'try {',
+        '  $null = $owner.Show();',
+        '  $owner.BringToFront();',
+        '  $owner.Activate();',
+        '  if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }',
+        '} finally {',
+        '  $d.Dispose();',
+        '  $owner.Close();',
+        '  $owner.Dispose();',
+        '}',
       ].join(' ');
       const result = execFileSync('powershell', ['-NoProfile', '-Command', script], {
         encoding: 'utf8',
@@ -323,45 +340,22 @@ async function addCustomSound(): Promise<void> {
       return;
     }
 
-    type UploadMethod = 'browse' | 'manual' | 'back';
-
-    const method = await navSelect<UploadMethod>({
-      frame: getFrame(getAddCustomLines()),
-      message: white('How do you want to add a sound?'),
-      choices: [
-        ...(hasNativeFilePicker()
-          ? [{ name: `${purple('📁')}  Browse files (open file picker)`, value: 'browse' as const }]
-          : []),
-        { name: `${purple('⌨')}  Enter file path manually`, value: 'manual' },
-        getBackChoice('back'),
-      ],
-    });
-
-    if (method === NAV_BACK || method === 'back') return;
-
-    let filePath: string | null = null;
-
-    if (method === 'browse') {
-      printTransient([...getAddCustomLines(), `  ${dim('Opening file picker...')}`]);
-      filePath = openFilePicker();
-      if (!filePath) {
-        printTransient([...getAddCustomLines(), `  ${dim('No file selected.')}`]);
-        await sleep(800);
-        continue;
-      }
+    if (!hasNativeFilePicker()) {
+      await waitForReturn([
+        ...getAddCustomLines(),
+        '',
+        `  ${warnColor('Custom uploads from the dashboard are supported on macOS and Windows.')}`,
+      ]);
+      return;
     }
 
-    if (method === 'manual') {
-      const result = await navInput({
-        frame: getFrame(getAddCustomLines()),
-        message: white('Path to your audio file (.mp3 / .wav / .m4a):'),
-        validate: (value) => normalizeWrappedInput(value).length > 0 || 'Please enter a file path',
-      });
-      if (result === NAV_BACK) return;
-      filePath = normalizeWrappedInput(result);
+    printTransient([...getAddCustomLines(), `  ${dim('Opening file picker...')}`]);
+    const filePath = openFilePicker();
+    if (!filePath) {
+      printTransient([...getAddCustomLines(), `  ${dim('No file selected.')}`]);
+      await sleep(800);
+      return;
     }
-
-    if (!filePath) continue;
 
     const success = await runUpload(filePath, {});
     if (success) {
@@ -455,11 +449,11 @@ async function showHelpInfo(): Promise<void> {
     '',
     `  ${dim('Run pushpop init once and it installs global git hooks through core.hooksPath.')}`,
     `  ${dim('After that, every repo on this machine works without per-project setup.')}`,
-    `  ${dim('Use "Add custom sound" in this dashboard to upload your own audio tags.')}`,
+    `  ${dim('Use "Add custom sound" to open the native file picker and upload your own audio tags.')}`,
     `  ${dim('Best in modern interactive terminals with ANSI/Unicode support.')}`,
     '',
     `  ${white('Upgrade to Pro:')} ${dim(POLAR_CHECKOUT_URL)}`,
-    `  ${dim('Then run:')} ${purple('pushpop activate <key>')}`,
+    `  ${dim('Activate from the CLI with:')} ${purple('pushpop activate <key>')}`,
   ]);
 }
 
@@ -477,26 +471,6 @@ async function shareFeedback(): Promise<void> {
     message: white('Press Enter to return.'),
     choices: [getBackChoice('back' as const)],
   });
-}
-
-async function activateLicense(): Promise<void> {
-  while (true) {
-    const result = await navInput({
-      frame: getFrame(),
-      message: white('Enter your Polar license key:'),
-      validate: (value) => normalizeWrappedInput(value).length > 0 || 'Please enter a license key',
-    });
-
-    if (result === NAV_BACK) return;
-
-    try {
-      await runActivate(normalizeWrappedInput(result), { exitOnError: false });
-      await sleep(1500);
-      return;
-    } catch {
-      await sleep(800);
-    }
-  }
 }
 
 function hooksInstalled(): boolean {
@@ -529,7 +503,6 @@ export async function runDashboard(): Promise<void> {
     | 'volume'
     | 'upload'
     | 'manage'
-    | 'activate'
     | 'help'
     | 'feedback'
     | 'uninstall'
@@ -562,7 +535,6 @@ export async function runDashboard(): Promise<void> {
         { name: `${purple('◐')}  Set volume`, value: 'volume' },
         { name: `${purple('♫')}  Add custom sound`, value: 'upload' },
         ...(isPro() ? [{ name: `${purple('⌫')}  Manage custom sounds`, value: 'manage' as const }] : []),
-        { name: `${purple('◇')}  Activate license`, value: 'activate' },
         { name: `${purple('ⓘ')}  Help / Info`, value: 'help' },
         { name: `${purple('✎')}  Share feedback`, value: 'feedback' },
         { name: `${purple('⌦')}  Uninstall`, value: 'uninstall' },
@@ -590,11 +562,6 @@ export async function runDashboard(): Promise<void> {
 
     if (choice === 'manage') {
       await manageCustomSounds();
-      continue;
-    }
-
-    if (choice === 'activate') {
-      await activateLicense();
       continue;
     }
 

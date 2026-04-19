@@ -2,7 +2,7 @@
 
 > Play a short producer-style audio tag every time you `git commit` or `git push`.
 
-pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports custom uploads from inside the dashboard, and officially supports Windows and macOS.
+pushpop installs global Git hooks on your machine, gives you an interactive dashboard for assigning sounds, supports native file-picker uploads from inside the dashboard, and officially supports Windows and macOS.
 
 ## Install
 
@@ -40,7 +40,7 @@ pushpop
 
 - Interactive terminal dashboard for sound assignment
 - Built-in sound packs across General, Gaming, Nature, Sci-Fi, and Producer Tags
-- Dashboard-based custom uploads with preview-before-save
+- Dashboard custom uploads via the native macOS/Windows file picker with preview-before-save
 - Automatic truncation to the first 5.5 seconds when `ffmpeg` is available
 - Runtime volume control with presets from `0%` to `100%`
 - Pro-only custom sound management for deleting uploaded sounds
@@ -55,7 +55,7 @@ The dashboard is designed for modern interactive terminals with ANSI and Unicode
 
 ## Uploads and audio limits
 
-Custom uploads happen from the dashboard and accept `.mp3`, `.wav`, and `.m4a`.
+Custom uploads happen from the dashboard through the native file picker and accept `.mp3`, `.wav`, and `.m4a`.
 
 - pushpop always warns before save that custom tags are limited to 5.5 seconds.
 - Files longer than 5.5 seconds are truncated to the first 5.5 seconds with `ffmpeg -t 5.5 -y`.
@@ -77,6 +77,10 @@ The dashboard also includes:
 
 - `Help / Info` with a quick explanation of how pushpop works
 - `Manage custom sounds` for Pro users to delete uploaded files they no longer want
+
+Pro activation is done from the CLI with:
+
+- `pushpop activate YOUR-LICENSE-KEY`
 
 ## Free vs Pro
 
