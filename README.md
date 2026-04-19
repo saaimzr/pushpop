@@ -38,7 +38,7 @@ pushpop
 # 3. Pick a sound, assign it to commit or push, done
 ```
 
-That's it. Next time you `git commit` or `git push`, your sound plays. 🎵
+That's it. Next time you `git commit` or `git push`, your sound plays in any repo on your machine. No per-repo config needed. ♫ ♫ ♫
 
 ---
 
@@ -60,15 +60,24 @@ That's it. Next time you `git commit` or `git push`, your sound plays. 🎵
 
 Pushpop ships with built-in sounds across 5 genres:
 
-- ○ **General** — ka-ching, applause, gong
-- ⊕  **Gaming** — coin collects, level-ups, YOSHI
-- ≋ **Nature** — thunder, water drops
-- ✦ **Sci-Fi** — laser blasts, warp whooshes, synth beeps
-- ♫ **Producer Tags** — iconic tags from producers
-
+- ○ &nbsp; **Interactive terminal dashboard** — browse, preview, and assign sounds without leaving the terminal
+- ♫ &nbsp; **5 built-in sound packs** — General, Gaming, Nature, Sci-Fi, and Producer Tags
+- ⬆ &nbsp; **Custom uploads** — add your own `.mp3`, `.wav`, or `.m4a` files via the native macOS / Windows file picker or by pasting a path
+- ✦ &nbsp; **Volume control** — choose from 0 %, 25 %, 50 %, 75 %, or 100 %
+- ◌ &nbsp; **CI-safe** — hooks skip audio when `$CI` is set
+  
 ---
 
-## How it works
+## Platform Support
+
+**macOS** via `afplay` · **Windows** via WMP COM / `ffplay` / PowerShell fallback chain. Requires a modern terminal (Windows Terminal, Terminal.app, iTerm2, VS Code).
+
+## Uploads
+
+Upload `.mp3`, `.wav`, or `.m4a` files from the dashboard. Tags are capped at **5.5 s** — longer files are auto-trimmed when `ffmpeg` is installed. Preview before saving.
+
+
+## How It Works
 
 pushpop sets a **global `core.hooksPath`** (`~/.pushpop/hooks/`), so every repo works without per-project config. Hooks are CI-safe, debounce within 2 s, and chain to existing repo-local hooks. Config lives in `~/.pushpop/config.json`.
 
@@ -96,16 +105,23 @@ Run `pushpop doctor` for full diagnostics. For verbose audio logging: `PUSHPOP_D
 | Price                | Free         | $1.29 one-time |
 
 
-👉 **[Grab Pro here](https://pushpop.lemonsqueezy.com)** — Thanks for your support :)
+► **[Grab Pro here](https://buy.polar.sh/polar_cl_1tD9WmV9vx3FrAiTVfKNMDXcQvtLemfYhdzqH37KkAS)** — Thanks for your support :)
 
 Once you have a key:
 
 ```bash
 pushpop activate YOUR-LICENSE-KEY
+
 ```
+
+## Feedback
+
+Bug reports, feature requests, and producer-tag suggestions, etc are all welcome:
+
+✧  **saaim.raad3@gmail.com**
 
 ---
 
 ## License
 
-MIT — the code is open.
+MIT
